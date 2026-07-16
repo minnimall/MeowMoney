@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Prompt', sans-serif;
+  --font-display: 'Bebas Neue', sans-serif;
+
+  --color-cream: #efebe9;
+  --color-beige: #e4d4bc;
+  --color-tan: #ae917c;
+  --color-taupe: #a1887f;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+}
