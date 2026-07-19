@@ -7,6 +7,10 @@ const { errorHandler, notFound } = require('./middleware/errorHandler');
 // Routes (สร้างไฟล์เหล่านี้ใน routes/ ถ้ายังไม่มี)
 const authRoutes = require('./routes/authRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
+const favoriteRoutes = require('./routes/favoriteRoutes');
+const recurringRoutes = require('./routes/recurringRoutes');
+const settingsRoutes = require('./routes/settingsRoutes');
+const savingsGoalRoutes = require('./routes/savingsGoalRoutes');
 
 // เชื่อมต่อ MongoDB Atlas
 connectDB();
@@ -26,6 +30,11 @@ app.get('/', (req, res) => {
 // ผูก routes เข้ากับ path หลัก
 app.use('/api/auth', authRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/favorites', favoriteRoutes);
+app.use('/api/recurring', recurringRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/savings-goals', savingsGoalRoutes);
+
 
 // ต้องอยู่หลัง routes ทั้งหมดเสมอ
 app.use(notFound);
