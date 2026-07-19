@@ -21,7 +21,8 @@ export async function updateSavingsGoal(id, payload) {
 }
 
 export async function deleteSavingsGoal(id) {
-  await api.delete(`/savings-goals/${id}`);
+  const res = await api.delete(`/savings-goals/${id}`);
+  return res.data.data.deletedTransactionIds.map(String);
 }
 
 // คืนค่า goal ที่อัปเดตแล้ว + transaction รายจ่ายที่ระบบสร้างคู่กันให้

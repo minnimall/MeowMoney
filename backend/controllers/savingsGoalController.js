@@ -46,18 +46,32 @@ const updateSavingsGoal = async (req, res, next) => {
 
 const deleteSavingsGoal = async (req, res, next) => {
   try {
-    const goal = await SavingsGoal.findOneAndDelete({
-      _id: req.params.id,
-      user: req.user._id,
-    });
+    const goal = await SavingsGoal.findOne({ _id: req.params.id, user: req.user._id });
     if (!goal) {
       res.status(404);
-      throw new Error("ไม่พบเป้าหมายออมนี้");
+      throw new Error('ไม่พบเป้าหมายออมนี้');
     }
-    res.json({ success: true, data: {} });
-  } catch (error) {
-    next(error);
-  }
+
+    const affectedTransactions = await Transaction.find({
+      user: req.user._id,
+      savingsGoalId: goal._id,
+      isDeleted: false,
+    });
+
+    await Transaction.updateMany(
+      { user: req.user._id, savingsGoalId: goal._id },
+      { $set: { isDeleted: true } }
+    );
+
+    await SavingsGoal.findByIdAndDelete(goal._id);
+
+    res.json({
+      success: true,
+      data: {
+        deletedTransactionIds: affectedTransactions.map((t) => t._id),
+      },
+    });
+  } catch (error) { next(error); }
 };
 
 // @route POST /api/savings-goals/:id/deposit

@@ -255,29 +255,88 @@ function monthShortLabel(key) {
   });
 }
 
-function parseQuickAdd(text) {
+// เรียนรู้ว่าคำ (จาก note) ไหนเคยถูกจัดเข้าหมวดไหนบ้าง จากประวัติจริงของผู้ใช้คนนี้
+// ยิ่งใช้งานนาน ยิ่งเดาแม่นขึ้น เพราะเรียนรู้จากพฤติกรรมจริง ไม่ใช่ keyword ตายตัว
+function buildLearnedKeywords(transactions) {
+  const map = {}; // { type: { category: { word: count } } }
+  transactions.forEach((t) => {
+    if (!t.note) return;
+    const cleanNote = t.note
+      .replace(/\(อัตโนมัติ\)/g, "")
+      .replace(/[0-9]/g, "")
+      .trim();
+    if (cleanNote.length < 2) return;
+
+    // ตัด note เป็นชิ้นคำสั้นๆ ด้วย sliding window (เพราะภาษาไทยไม่มีช่องว่างคั่นคำ)
+    // เก็บ substring ยาว 2-4 ตัวอักษร เป็น "คำ" ที่อาจมีความหมาย
+    const chunks = new Set();
+    for (let len = 2; len <= Math.min(4, cleanNote.length); len++) {
+      for (let i = 0; i <= cleanNote.length - len; i++) {
+        chunks.add(cleanNote.slice(i, i + len));
+      }
+    }
+
+    if (!map[t.type]) map[t.type] = {};
+    if (!map[t.type][t.category]) map[t.type][t.category] = {};
+    chunks.forEach((chunk) => {
+      map[t.type][t.category][chunk] =
+        (map[t.type][t.category][chunk] || 0) + 1;
+    });
+  });
+  return map;
+}
+
+function parseQuickAdd(text, learnedKeywords) {
   const match = text.trim().match(/(\d+(\.\d+)?)\s*$/);
   if (!match) return null;
   const amount = Math.abs(parseFloat(match[1]));
   if (!amount) return null;
   const noteText = text.slice(0, match.index).trim();
+  const lowerNote = noteText.toLowerCase();
+
+  function scoreCategories(staticKeywords, learnedMap) {
+    const scores = {};
+
+    // คะแนนจาก keyword ตายตัว (น้ำหนักสูง เพราะแม่นยำกว่า)
+    Object.entries(staticKeywords).forEach(([cat, kws]) => {
+      const hits = kws.filter((k) =>
+        lowerNote.includes(k.toLowerCase()),
+      ).length;
+      if (hits > 0) scores[cat] = (scores[cat] || 0) + hits * 3;
+    });
+
+    // คะแนนจากประวัติที่เคยพิมพ์ไว้ (เรียนรู้เฉพาะตัวผู้ใช้)
+    if (learnedMap) {
+      Object.entries(learnedMap).forEach(([cat, words]) => {
+        let hit = 0;
+        Object.entries(words).forEach(([word, count]) => {
+          if (lowerNote.includes(word.toLowerCase())) {
+            hit += Math.min(count, 5); // จำกัด weight กันคำที่ใช้บ่อยเกินไปครอบงำ
+          }
+        });
+        if (hit > 0) scores[cat] = (scores[cat] || 0) + hit;
+      });
+    }
+
+    const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+    return best ? best[0] : null;
+  }
+
+  // เดา type ก่อน (รายรับ/รายจ่าย) จากทั้ง static + learned
+  const incomeCat = scoreCategories(INCOME_KEYWORDS, learnedKeywords?.income);
+  const expenseCat = scoreCategories(
+    EXPENSE_KEYWORDS,
+    learnedKeywords?.expense,
+  );
+
   let type = "expense";
-  let category = "อื่นๆ";
-  for (const [cat, kws] of Object.entries(INCOME_KEYWORDS)) {
-    if (kws.some((k) => noteText.toLowerCase().includes(k.toLowerCase()))) {
-      type = "income";
-      category = cat;
-      break;
-    }
+  let category = expenseCat || "อื่นๆ";
+
+  if (incomeCat) {
+    type = "income";
+    category = incomeCat;
   }
-  if (type === "expense") {
-    for (const [cat, kws] of Object.entries(EXPENSE_KEYWORDS)) {
-      if (kws.some((k) => noteText.toLowerCase().includes(k.toLowerCase()))) {
-        category = cat;
-        break;
-      }
-    }
-  }
+
   return { amount, note: noteText || category, type, category };
 }
 
@@ -423,6 +482,8 @@ export default function Dashboard() {
   const [newGoal, setNewGoal] = useState({ name: "", target: "" });
   const [depositingGoalId, setDepositingGoalId] = useState(null);
   const [depositAmount, setDepositAmount] = useState("");
+  const [editingGoalId, setEditingGoalId] = useState(null); // เพิ่มบรรทัดนี้
+const [editGoalDraft, setEditGoalDraft] = useState({ name: "", target: "" });
   const [recurringList, setRecurringList] = useState([]);
   const [favorites, setFavorites] = useState([]);
   const [trendMonthsRange, setTrendMonthsRange] = useState(6);
@@ -530,13 +591,11 @@ export default function Dashboard() {
       setQuickAddText("");
       return;
     }
-    const parsed = parseQuickAdd(quickAddText);
+    const parsed = parseQuickAdd(quickAddText, learnedKeywords); // ← เพิ่ม arg ที่ 2
     if (!parsed) {
       showToast('พิมพ์ชื่อรายการตามด้วยจำนวนเงินนะ เช่น "ข้าว 50"', "error");
       return;
     }
-    // ใช้ type ที่ผู้ใช้เลือกจากปุ่มสลับเสมอ แทนการเดาจาก keyword
-    // แต่ category ยังให้ parseQuickAdd ช่วยเดาให้ ถ้าเดาไม่ได้ก็ fallback เป็น "อื่นๆ"
     const category =
       quickAddType === "income"
         ? parsed.type === "income"
@@ -552,6 +611,7 @@ export default function Dashboard() {
     });
     setQuickAddText("");
   }
+
   async function addTransactionDirect({ type, category, amount, note }) {
     try {
       const created = await createTransaction({
@@ -693,19 +753,23 @@ export default function Dashboard() {
   }, [filtered]);
 
   const trendData = useMemo(() => {
-  const sliced =
-    trendMonthsRange === "all"
-      ? [...monthlySummary]
-      : [...monthlySummary].slice(0, trendMonthsRange);
-  return sliced
-    .reverse()
-    .map((m) => ({
+    const sliced =
+      trendMonthsRange === "all"
+        ? [...monthlySummary]
+        : [...monthlySummary].slice(0, trendMonthsRange);
+    return sliced.reverse().map((m) => ({
       key: m.key,
       month: monthShortLabel(m.key),
       รายรับ: m.income,
       รายจ่าย: m.expense,
     }));
-}, [monthlySummary, trendMonthsRange]);
+  }, [monthlySummary, trendMonthsRange]);
+
+  // เพิ่ม useMemo นี้ (วางแถวเดียวกับ pieData, trendData)
+  const learnedKeywords = useMemo(
+    () => buildLearnedKeywords(transactions),
+    [transactions],
+  );
 
   const catStatus = useMemo(() => {
     const asc = [...monthlySummary].sort((a, b) => (a.key < b.key ? -1 : 1));
@@ -1226,14 +1290,40 @@ export default function Dashboard() {
     }
   }
 
-  async function removeSavingsGoal(id) {
-    try {
-      await deleteSavingsGoal(id);
-      setSavingsGoals((prev) => prev.filter((g) => g.id !== id));
-    } catch (err) {
-      showToast("ลบเป้าหมายไม่สำเร็จ", "error");
-    }
+  async function submitEditGoal(goalId) {
+  if (!editGoalDraft.name.trim() || !editGoalDraft.target || Number(editGoalDraft.target) <= 0) {
+    showToast("กรุณากรอกชื่อและจำนวนเงินเป้าหมายให้ถูกต้อง", "error");
+    return;
   }
+  try {
+    const updated = await updateSavingsGoal(goalId, {
+      name: editGoalDraft.name.trim(),
+      target: Number(editGoalDraft.target),
+    });
+    setSavingsGoals((prev) =>
+      prev.map((g) => (g.id === goalId ? { ...g, ...updated } : g)),
+    );
+    setEditingGoalId(null);
+    showToast("แก้ไขเป้าหมายแล้ว");
+  } catch (err) {
+    showToast("แก้ไขเป้าหมายไม่สำเร็จ", "error");
+  }
+}
+
+  async function removeSavingsGoal(id) {
+  try {
+    const deletedTransactionIds = await deleteSavingsGoal(id);
+    setSavingsGoals((prev) => prev.filter((g) => g.id !== id));
+    if (deletedTransactionIds.length > 0) {
+      setTransactions((prev) =>
+        prev.filter((t) => !deletedTransactionIds.includes(t.id)),
+      );
+    }
+    showToast("ลบเป้าหมายแล้ว คืนเงินกลับเข้ายอดคงเหลือ");
+  } catch (err) {
+    showToast("ลบเป้าหมายไม่สำเร็จ", "error");
+  }
+}
 
   async function submitDeposit(goalId) {
     if (!depositAmount || Number(depositAmount) <= 0) {
@@ -1587,7 +1677,7 @@ export default function Dashboard() {
                   value={quickAddText}
                   onChange={(e) => setQuickAddText(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && submitQuickAdd()}
-                  placeholder='เช่น ข้าว 50'
+                  placeholder="เช่น ข้าว 50"
                   className="h-full w-full border-none bg-transparent text-sm text-[var(--text-dark)] outline-none"
                 />
               )}
@@ -2506,79 +2596,129 @@ export default function Dashboard() {
             </p>
           )}
           {savingsGoals.map((g) => {
-            const ratio = g.target > 0 ? g.saved / g.target : 0;
-            const isDepositing = depositingGoalId === g.id;
-            return (
-              <div
-                key={g.id}
-                className="rounded-xl border border-[var(--border)] p-3"
-              >
-                <div className="mb-1.5 flex items-center justify-between">
-                  <span className="text-[13px] font-semibold text-[var(--text-dark)]">
-                    {g.name}
-                  </span>
-                  <button
-                    onClick={() => removeSavingsGoal(g.id)}
-                    aria-label="ลบเป้าหมาย"
-                    className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer"
-                  >
-                    <X size={11} className="text-[var(--text-muted)]" />
-                  </button>
-                </div>
-                <ProgressBar ratio={ratio} color="var(--income)" />
-                <div className="mt-1.5 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                  <span>
-                    {formatBaht(g.saved)} / {formatBaht(g.target)}
-                  </span>
-                  <span>{Math.round(ratio * 100)}%</span>
-                </div>
+  const ratio = g.target > 0 ? g.saved / g.target : 0;
+  const isDepositing = depositingGoalId === g.id;
+  const isEditing = editingGoalId === g.id;
+  return (
+    <div key={g.id} className="rounded-xl border border-[var(--border)] p-3">
+      {isEditing ? (
+        <div className="mb-1.5 flex flex-col gap-1.5">
+          <input
+            type="text"
+            value={editGoalDraft.name}
+            onChange={(e) =>
+              setEditGoalDraft((d) => ({ ...d, name: e.target.value }))
+            }
+            placeholder="ชื่อเป้าหมาย"
+            className={`${inputCls} h-8 text-xs`}
+          />
+          <input
+            type="number"
+            value={editGoalDraft.target}
+            onChange={(e) =>
+              setEditGoalDraft((d) => ({ ...d, target: e.target.value }))
+            }
+            placeholder="จำนวนเงินเป้าหมาย (บาท)"
+            className={`${inputCls} h-8 text-xs`}
+          />
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => submitEditGoal(g.id)}
+              className="mm-btn-3d mm-btn-primary flex-1 rounded-lg border-none bg-[var(--accent)] py-1.5 text-xs font-semibold text-[var(--accent-contrast)] cursor-pointer"
+            >
+              บันทึก
+            </button>
+            <button
+              onClick={() => setEditingGoalId(null)}
+              className="mm-btn-3d flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-transparent cursor-pointer"
+            >
+              <X size={12} className="text-[var(--text-muted)]" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-1.5 flex items-center justify-between">
+          <span className="text-[13px] font-semibold text-[var(--text-dark)]">
+            {g.name}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                setEditingGoalId(g.id);
+                setEditGoalDraft({ name: g.name, target: String(g.target) });
+              }}
+              aria-label="แก้ไขเป้าหมาย"
+              className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer"
+            >
+              <Pencil size={11} className="text-[var(--text-muted)]" />
+            </button>
+            <button
+              onClick={() => removeSavingsGoal(g.id)}
+              aria-label="ลบเป้าหมาย"
+              className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer"
+            >
+              <X size={11} className="text-[var(--text-muted)]" />
+            </button>
+          </div>
+        </div>
+      )}
 
-                {isDepositing ? (
-                  <div className="mt-2">
-                    <p className="mb-1.5 text-[10px] text-[var(--text-muted)]">
-                      คงเหลือปัจจุบัน: {formatBaht(overallTotals.balance)}
-                    </p>
-                    <div className="flex gap-1.5">
-                      <input
-                        type="number"
-                        value={depositAmount}
-                        onChange={(e) => setDepositAmount(e.target.value)}
-                        placeholder="จำนวนเงิน"
-                        autoFocus
-                        className={`${inputCls} h-8 flex-1 text-xs`}
-                      />
-                      <button
-                        onClick={() => submitDeposit(g.id)}
-                        className="mm-btn-3d mm-btn-primary shrink-0 rounded-lg border-none bg-[var(--accent)] px-3 text-xs font-semibold text-[var(--accent-contrast)] cursor-pointer"
-                      >
-                        ยืนยัน
-                      </button>
-                      <button
-                        onClick={() => {
-                          setDepositingGoalId(null);
-                          setDepositAmount("");
-                        }}
-                        aria-label="ยกเลิก"
-                        className="mm-btn-3d flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-transparent cursor-pointer"
-                      >
-                        <X size={12} className="text-[var(--text-muted)]" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setDepositingGoalId(g.id);
-                      setDepositAmount("");
-                    }}
-                    className="mt-2 flex items-center gap-1 text-xs font-semibold text-[var(--accent)] underline cursor-pointer bg-transparent border-none p-0"
-                  >
-                    <PiggyBank size={12} /> เติมเงินเข้าเป้าหมายนี้
-                  </button>
-                )}
-              </div>
-            );
-          })}
+      <ProgressBar ratio={ratio} color="var(--income)" />
+      <div className="mt-1.5 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+        <span>
+          {formatBaht(g.saved)} / {formatBaht(g.target)}
+        </span>
+        <span>{Math.round(ratio * 100)}%</span>
+      </div>
+
+      {isDepositing ? (
+        <div className="mt-2">
+          <p className="mb-1.5 text-[10px] text-[var(--text-muted)]">
+            คงเหลือปัจจุบัน: {formatBaht(overallTotals.balance)}
+          </p>
+          <div className="flex gap-1.5">
+            <input
+              type="number"
+              value={depositAmount}
+              onChange={(e) => setDepositAmount(e.target.value)}
+              placeholder="จำนวนเงิน"
+              autoFocus
+              className={`${inputCls} h-8 flex-1 text-xs`}
+            />
+            <button
+              onClick={() => submitDeposit(g.id)}
+              className="mm-btn-3d mm-btn-primary shrink-0 rounded-lg border-none bg-[var(--accent)] px-3 text-xs font-semibold text-[var(--accent-contrast)] cursor-pointer"
+            >
+              ยืนยัน
+            </button>
+            <button
+              onClick={() => {
+                setDepositingGoalId(null);
+                setDepositAmount("");
+              }}
+              aria-label="ยกเลิก"
+              className="mm-btn-3d flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-transparent cursor-pointer"
+            >
+              <X size={12} className="text-[var(--text-muted)]" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        !isEditing && (
+          <button
+            onClick={() => {
+              setDepositingGoalId(g.id);
+              setDepositAmount("");
+            }}
+            className="mt-2 flex items-center gap-1 text-xs font-semibold text-[var(--accent)] underline cursor-pointer bg-transparent border-none p-0"
+          >
+            <PiggyBank size={12} /> เติมเงินเข้าเป้าหมายนี้
+          </button>
+        )
+      )}
+    </div>
+  );
+})}
         </div>
 
         <h4 className="m-0 mb-2.5 text-[13px] font-bold text-[var(--text-dark)]">
@@ -2648,24 +2788,24 @@ export default function Dashboard() {
             </div>
 
             <div className="mb-2.5 flex items-center justify-between">
-  <h4 className="m-0 text-[13px] font-bold text-[var(--text-dark)]">
-    แนวโน้มรายเดือน
-  </h4>
-  <select
-    value={trendMonthsRange}
-    onChange={(e) =>
-      setTrendMonthsRange(
-        e.target.value === "all" ? "all" : Number(e.target.value),
-      )
-    }
-    className={`${selectCls} h-7 w-[130px] text-[11px]`}
-  >
-    <option value={3}>ย้อนหลัง 3 เดือน</option>
-    <option value={6}>ย้อนหลัง 6 เดือน</option>
-    <option value={12}>ย้อนหลัง 12 เดือน</option>
-    <option value="all">ทั้งหมด</option>
-  </select>
-</div>
+              <h4 className="m-0 text-[13px] font-bold text-[var(--text-dark)]">
+                แนวโน้มรายเดือน
+              </h4>
+              <select
+                value={trendMonthsRange}
+                onChange={(e) =>
+                  setTrendMonthsRange(
+                    e.target.value === "all" ? "all" : Number(e.target.value),
+                  )
+                }
+                className={`${selectCls} h-7 w-[130px] text-[11px]`}
+              >
+                <option value={3}>ย้อนหลัง 3 เดือน</option>
+                <option value={6}>ย้อนหลัง 6 เดือน</option>
+                <option value={12}>ย้อนหลัง 12 เดือน</option>
+                <option value="all">ทั้งหมด</option>
+              </select>
+            </div>
             {trendData.length > 0 ? (
               <div style={{ width: "100%", height: 260 }}>
                 <ResponsiveContainer>
@@ -2885,7 +3025,6 @@ export default function Dashboard() {
                   <div className="truncate text-[11px] text-[var(--text-muted)]">
                     {formatDate(t.date)}
                     {t.createdAt ? ` · เวลา ${formatTime(t.createdAt)} น.` : ""}
-                    {t.note ? ` · ${t.note}` : ""}
                   </div>
                 </div>
               </div>
