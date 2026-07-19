@@ -18,7 +18,13 @@ connectDB();
 const app = express();
 
 // Middleware พื้นฐาน
-app.use(cors()); // อนุญาตให้ frontend (คนละ origin) เรียก API ได้
+app.use(cors({
+  origin: [
+    'http://localhost:5173', // สำหรับตอน dev
+    'https://meowmoney-nine.vercel.app' // โดเมนจริงบน Vercel
+  ],
+  credentials: true
+}));
 app.use(express.json()); // parse JSON body
 app.use(express.urlencoded({ extended: true }));
 
