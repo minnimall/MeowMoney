@@ -483,7 +483,7 @@ export default function Dashboard() {
   const [depositingGoalId, setDepositingGoalId] = useState(null);
   const [depositAmount, setDepositAmount] = useState("");
   const [editingGoalId, setEditingGoalId] = useState(null); // เพิ่มบรรทัดนี้
-const [editGoalDraft, setEditGoalDraft] = useState({ name: "", target: "" });
+  const [editGoalDraft, setEditGoalDraft] = useState({ name: "", target: "" });
   const [recurringList, setRecurringList] = useState([]);
   const [favorites, setFavorites] = useState([]);
   const [trendMonthsRange, setTrendMonthsRange] = useState(6);
@@ -898,6 +898,11 @@ const [editGoalDraft, setEditGoalDraft] = useState({ name: "", target: "" });
   }, [savingsGoals]);
 
   const [budgetModalOpen, setBudgetModalOpen] = useState(false);
+  const [editingBudgetCategory, setEditingBudgetCategory] = useState(null);
+  const [editBudgetDraft, setEditBudgetDraft] = useState({
+    amount: "",
+    period: "monthly",
+  });
   const [newBudget, setNewBudget] = useState({
     category: CATEGORY_OPTIONS.expense[0],
     amount: "",
@@ -927,6 +932,28 @@ const [editGoalDraft, setEditGoalDraft] = useState({ name: "", target: "" });
       showToast("เพิ่มงบประมาณแล้ว");
     } catch (err) {
       showToast("เพิ่มงบประมาณไม่สำเร็จ", "error");
+    }
+  }
+
+  async function submitEditBudget(category) {
+    if (!editBudgetDraft.amount || Number(editBudgetDraft.amount) <= 0) {
+      showToast("กรุณากรอกจำนวนเงินให้ถูกต้อง", "error");
+      return;
+    }
+    const updated = {
+      ...budgets,
+      [category]: {
+        amount: Number(editBudgetDraft.amount),
+        period: editBudgetDraft.period,
+      },
+    };
+    try {
+      await updateSettings({ budgets: updated });
+      setBudgets(updated);
+      setEditingBudgetCategory(null);
+      showToast("แก้ไขงบประมาณแล้ว");
+    } catch (err) {
+      showToast("แก้ไขงบประมาณไม่สำเร็จ", "error");
     }
   }
 
@@ -1291,39 +1318,43 @@ const [editGoalDraft, setEditGoalDraft] = useState({ name: "", target: "" });
   }
 
   async function submitEditGoal(goalId) {
-  if (!editGoalDraft.name.trim() || !editGoalDraft.target || Number(editGoalDraft.target) <= 0) {
-    showToast("กรุณากรอกชื่อและจำนวนเงินเป้าหมายให้ถูกต้อง", "error");
-    return;
+    if (
+      !editGoalDraft.name.trim() ||
+      !editGoalDraft.target ||
+      Number(editGoalDraft.target) <= 0
+    ) {
+      showToast("กรุณากรอกชื่อและจำนวนเงินเป้าหมายให้ถูกต้อง", "error");
+      return;
+    }
+    try {
+      const updated = await updateSavingsGoal(goalId, {
+        name: editGoalDraft.name.trim(),
+        target: Number(editGoalDraft.target),
+      });
+      setSavingsGoals((prev) =>
+        prev.map((g) => (g.id === goalId ? { ...g, ...updated } : g)),
+      );
+      setEditingGoalId(null);
+      showToast("แก้ไขเป้าหมายแล้ว");
+    } catch (err) {
+      showToast("แก้ไขเป้าหมายไม่สำเร็จ", "error");
+    }
   }
-  try {
-    const updated = await updateSavingsGoal(goalId, {
-      name: editGoalDraft.name.trim(),
-      target: Number(editGoalDraft.target),
-    });
-    setSavingsGoals((prev) =>
-      prev.map((g) => (g.id === goalId ? { ...g, ...updated } : g)),
-    );
-    setEditingGoalId(null);
-    showToast("แก้ไขเป้าหมายแล้ว");
-  } catch (err) {
-    showToast("แก้ไขเป้าหมายไม่สำเร็จ", "error");
-  }
-}
 
   async function removeSavingsGoal(id) {
-  try {
-    const deletedTransactionIds = await deleteSavingsGoal(id);
-    setSavingsGoals((prev) => prev.filter((g) => g.id !== id));
-    if (deletedTransactionIds.length > 0) {
-      setTransactions((prev) =>
-        prev.filter((t) => !deletedTransactionIds.includes(t.id)),
-      );
+    try {
+      const deletedTransactionIds = await deleteSavingsGoal(id);
+      setSavingsGoals((prev) => prev.filter((g) => g.id !== id));
+      if (deletedTransactionIds.length > 0) {
+        setTransactions((prev) =>
+          prev.filter((t) => !deletedTransactionIds.includes(t.id)),
+        );
+      }
+      showToast("ลบเป้าหมายแล้ว คืนเงินกลับเข้ายอดคงเหลือ");
+    } catch (err) {
+      showToast("ลบเป้าหมายไม่สำเร็จ", "error");
     }
-    showToast("ลบเป้าหมายแล้ว คืนเงินกลับเข้ายอดคงเหลือ");
-  } catch (err) {
-    showToast("ลบเป้าหมายไม่สำเร็จ", "error");
   }
-}
 
   async function submitDeposit(goalId) {
     if (!depositAmount || Number(depositAmount) <= 0) {
@@ -1564,12 +1595,12 @@ const [editGoalDraft, setEditGoalDraft] = useState({ name: "", target: "" });
 
         <div className="mx-auto w-full max-w-[920px] p-4 sm:p-6">
           {/* Hero header */}
-          <div className="relative mb-6 flex flex-wrap items-end justify-between gap-3 py-1">
-            <div className="min-w-0">
+          <div className="relative mb-6 flex items-start justify-between gap-3 py-1">
+            <div className="min-w-0 flex-1">
               <p className="m-0 mb-1 text-xs font-semibold text-[var(--text-muted)]">
                 สวัสดี {profile.name}
               </p>
-              <h2 className="m-0 text-[26px] font-extrabold leading-tight text-[var(--text-dark)] sm:text-3xl">
+              <h2 className="m-0 text-[22px] font-extrabold leading-tight text-[var(--text-dark)] sm:text-3xl">
                 จัดการเงินของคุณกับ{" "}
                 <span
                   className="bg-clip-text text-transparent"
@@ -1582,7 +1613,7 @@ const [editGoalDraft, setEditGoalDraft] = useState({ name: "", target: "" });
                 </span>
               </h2>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               {/* <button
                 onClick={exportCSV}
                 aria-label="ส่งออก CSV"
@@ -1596,14 +1627,14 @@ const [editGoalDraft, setEditGoalDraft] = useState({ name: "", target: "" });
               <button
                 onClick={openAddForm}
                 aria-label="เพิ่มรายการ"
-                className="mm-btn-3d mm-btn-primary flex h-11 w-11 shrink-0 items-center justify-center gap-1.5 rounded-full border-none text-[13px] font-semibold text-white cursor-pointer sm:h-[38px] sm:w-auto sm:px-4"
+                className="mm-btn-3d mm-btn-primary flex h-9 w-9 shrink-0 items-center justify-center gap-1.5 rounded-full border-none text-xs font-semibold text-white cursor-pointer sm:h-8 sm:w-auto sm:px-3"
                 style={{
                   backgroundImage:
                     "linear-gradient(135deg, var(--accent) 0%, var(--accent-pink) 100%)",
                 }}
               >
-                <Plus size={18} className="sm:hidden" />
-                <Plus size={15} className="hidden sm:block" />
+                <Plus size={15} className="sm:hidden" />
+                <Plus size={13} className="hidden sm:block" />
                 <span className="hidden sm:inline">เพิ่มรายการ</span>
               </button>
             </div>
@@ -2596,129 +2627,144 @@ const [editGoalDraft, setEditGoalDraft] = useState({ name: "", target: "" });
             </p>
           )}
           {savingsGoals.map((g) => {
-  const ratio = g.target > 0 ? g.saved / g.target : 0;
-  const isDepositing = depositingGoalId === g.id;
-  const isEditing = editingGoalId === g.id;
-  return (
-    <div key={g.id} className="rounded-xl border border-[var(--border)] p-3">
-      {isEditing ? (
-        <div className="mb-1.5 flex flex-col gap-1.5">
-          <input
-            type="text"
-            value={editGoalDraft.name}
-            onChange={(e) =>
-              setEditGoalDraft((d) => ({ ...d, name: e.target.value }))
-            }
-            placeholder="ชื่อเป้าหมาย"
-            className={`${inputCls} h-8 text-xs`}
-          />
-          <input
-            type="number"
-            value={editGoalDraft.target}
-            onChange={(e) =>
-              setEditGoalDraft((d) => ({ ...d, target: e.target.value }))
-            }
-            placeholder="จำนวนเงินเป้าหมาย (บาท)"
-            className={`${inputCls} h-8 text-xs`}
-          />
-          <div className="flex gap-1.5">
-            <button
-              onClick={() => submitEditGoal(g.id)}
-              className="mm-btn-3d mm-btn-primary flex-1 rounded-lg border-none bg-[var(--accent)] py-1.5 text-xs font-semibold text-[var(--accent-contrast)] cursor-pointer"
-            >
-              บันทึก
-            </button>
-            <button
-              onClick={() => setEditingGoalId(null)}
-              className="mm-btn-3d flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-transparent cursor-pointer"
-            >
-              <X size={12} className="text-[var(--text-muted)]" />
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="mb-1.5 flex items-center justify-between">
-          <span className="text-[13px] font-semibold text-[var(--text-dark)]">
-            {g.name}
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => {
-                setEditingGoalId(g.id);
-                setEditGoalDraft({ name: g.name, target: String(g.target) });
-              }}
-              aria-label="แก้ไขเป้าหมาย"
-              className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer"
-            >
-              <Pencil size={11} className="text-[var(--text-muted)]" />
-            </button>
-            <button
-              onClick={() => removeSavingsGoal(g.id)}
-              aria-label="ลบเป้าหมาย"
-              className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer"
-            >
-              <X size={11} className="text-[var(--text-muted)]" />
-            </button>
-          </div>
-        </div>
-      )}
+            const ratio = g.target > 0 ? g.saved / g.target : 0;
+            const isDepositing = depositingGoalId === g.id;
+            const isEditing = editingGoalId === g.id;
+            return (
+              <div
+                key={g.id}
+                className="rounded-xl border border-[var(--border)] p-3"
+              >
+                {isEditing ? (
+                  <div className="mb-1.5 flex flex-col gap-1.5">
+                    <input
+                      type="text"
+                      value={editGoalDraft.name}
+                      onChange={(e) =>
+                        setEditGoalDraft((d) => ({
+                          ...d,
+                          name: e.target.value,
+                        }))
+                      }
+                      placeholder="ชื่อเป้าหมาย"
+                      className={`${inputCls} h-8 text-xs`}
+                    />
+                    <input
+                      type="number"
+                      value={editGoalDraft.target}
+                      onChange={(e) =>
+                        setEditGoalDraft((d) => ({
+                          ...d,
+                          target: e.target.value,
+                        }))
+                      }
+                      placeholder="จำนวนเงินเป้าหมาย (บาท)"
+                      className={`${inputCls} h-8 text-xs`}
+                    />
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => submitEditGoal(g.id)}
+                        className="mm-btn-3d mm-btn-primary flex-1 rounded-lg border-none bg-[var(--accent)] py-1.5 text-xs font-semibold text-[var(--accent-contrast)] cursor-pointer"
+                      >
+                        บันทึก
+                      </button>
+                      <button
+                        onClick={() => setEditingGoalId(null)}
+                        className="mm-btn-3d flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-transparent cursor-pointer"
+                      >
+                        <X size={12} className="text-[var(--text-muted)]" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="text-[13px] font-semibold text-[var(--text-dark)]">
+                      {g.name}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setEditingGoalId(g.id);
+                          setEditGoalDraft({
+                            name: g.name,
+                            target: String(g.target),
+                          });
+                        }}
+                        aria-label="แก้ไขเป้าหมาย"
+                        className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer"
+                      >
+                        <Pencil
+                          size={11}
+                          className="text-[var(--text-muted)]"
+                        />
+                      </button>
+                      <button
+                        onClick={() => removeSavingsGoal(g.id)}
+                        aria-label="ลบเป้าหมาย"
+                        className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer"
+                      >
+                        <X size={11} className="text-[var(--text-muted)]" />
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-      <ProgressBar ratio={ratio} color="var(--income)" />
-      <div className="mt-1.5 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-        <span>
-          {formatBaht(g.saved)} / {formatBaht(g.target)}
-        </span>
-        <span>{Math.round(ratio * 100)}%</span>
-      </div>
+                <ProgressBar ratio={ratio} color="var(--income)" />
+                <div className="mt-1.5 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                  <span>
+                    {formatBaht(g.saved)} / {formatBaht(g.target)}
+                  </span>
+                  <span>{Math.round(ratio * 100)}%</span>
+                </div>
 
-      {isDepositing ? (
-        <div className="mt-2">
-          <p className="mb-1.5 text-[10px] text-[var(--text-muted)]">
-            คงเหลือปัจจุบัน: {formatBaht(overallTotals.balance)}
-          </p>
-          <div className="flex gap-1.5">
-            <input
-              type="number"
-              value={depositAmount}
-              onChange={(e) => setDepositAmount(e.target.value)}
-              placeholder="จำนวนเงิน"
-              autoFocus
-              className={`${inputCls} h-8 flex-1 text-xs`}
-            />
-            <button
-              onClick={() => submitDeposit(g.id)}
-              className="mm-btn-3d mm-btn-primary shrink-0 rounded-lg border-none bg-[var(--accent)] px-3 text-xs font-semibold text-[var(--accent-contrast)] cursor-pointer"
-            >
-              ยืนยัน
-            </button>
-            <button
-              onClick={() => {
-                setDepositingGoalId(null);
-                setDepositAmount("");
-              }}
-              aria-label="ยกเลิก"
-              className="mm-btn-3d flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-transparent cursor-pointer"
-            >
-              <X size={12} className="text-[var(--text-muted)]" />
-            </button>
-          </div>
-        </div>
-      ) : (
-        !isEditing && (
-          <button
-            onClick={() => {
-              setDepositingGoalId(g.id);
-              setDepositAmount("");
-            }}
-            className="mt-2 flex items-center gap-1 text-xs font-semibold text-[var(--accent)] underline cursor-pointer bg-transparent border-none p-0"
-          >
-            <PiggyBank size={12} /> เติมเงินเข้าเป้าหมายนี้
-          </button>
-        )
-      )}
-    </div>
-  );
-})}
+                {isDepositing ? (
+                  <div className="mt-2">
+                    <p className="mb-1.5 text-[10px] text-[var(--text-muted)]">
+                      คงเหลือปัจจุบัน: {formatBaht(overallTotals.balance)}
+                    </p>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="number"
+                        value={depositAmount}
+                        onChange={(e) => setDepositAmount(e.target.value)}
+                        placeholder="จำนวนเงิน"
+                        autoFocus
+                        className={`${inputCls} h-8 flex-1 text-xs`}
+                      />
+                      <button
+                        onClick={() => submitDeposit(g.id)}
+                        className="mm-btn-3d mm-btn-primary shrink-0 rounded-lg border-none bg-[var(--accent)] px-3 text-xs font-semibold text-[var(--accent-contrast)] cursor-pointer"
+                      >
+                        ยืนยัน
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDepositingGoalId(null);
+                          setDepositAmount("");
+                        }}
+                        aria-label="ยกเลิก"
+                        className="mm-btn-3d flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-transparent cursor-pointer"
+                      >
+                        <X size={12} className="text-[var(--text-muted)]" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  !isEditing && (
+                    <button
+                      onClick={() => {
+                        setDepositingGoalId(g.id);
+                        setDepositAmount("");
+                      }}
+                      className="mt-2 flex items-center gap-1 text-xs font-semibold text-[var(--accent)] underline cursor-pointer bg-transparent border-none p-0"
+                    >
+                      <PiggyBank size={12} /> เติมเงินเข้าเป้าหมายนี้
+                    </button>
+                  )
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <h4 className="m-0 mb-2.5 text-[13px] font-bold text-[var(--text-dark)]">
@@ -3127,98 +3173,192 @@ const [editGoalDraft, setEditGoalDraft] = useState({ name: "", target: "" });
               ยังไม่มีงบประมาณ เพิ่มหมวดหมู่แรกได้เลยด้านล่าง
             </p>
           )}
-          {budgetProgress.map((b) => (
-            <div
-              key={b.category}
-              className="rounded-xl border border-[var(--border)] p-3"
-            >
-              <div className="mb-1.5 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-[13px] font-semibold text-[var(--text-dark)]">
-                  {b.category}
-                  <span className="rounded-full bg-[var(--card-alt)] px-1.5 py-[1px] text-[9px] font-medium text-[var(--text-muted)]">
-                    {b.period === "weekly" ? "รายสัปดาห์" : "รายเดือน"}
-                  </span>
-                </span>
-                <button
-                  onClick={() => removeBudget(b.category)}
-                  aria-label="ลบงบประมาณ"
-                  className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer"
-                >
-                  <X size={11} className="text-[var(--text-muted)]" />
-                </button>
+          {budgetProgress.map((b) => {
+            const isEditing = editingBudgetCategory === b.category;
+            return (
+              <div
+                key={b.category}
+                className="rounded-xl border border-[var(--border)] p-3"
+              >
+                {isEditing ? (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[13px] font-semibold text-[var(--text-dark)]">
+                      {b.category}
+                    </span>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="number"
+                        value={editBudgetDraft.amount}
+                        onChange={(e) =>
+                          setEditBudgetDraft((d) => ({
+                            ...d,
+                            amount: e.target.value,
+                          }))
+                        }
+                        placeholder="จำนวนเงิน"
+                        autoFocus
+                        className={`${inputCls} h-8 flex-1 text-xs`}
+                      />
+                      <select
+                        value={editBudgetDraft.period}
+                        onChange={(e) =>
+                          setEditBudgetDraft((d) => ({
+                            ...d,
+                            period: e.target.value,
+                          }))
+                        }
+                        className={`${selectCls} h-8 w-[100px] shrink-0 text-xs`}
+                      >
+                        <option value="monthly">รายเดือน</option>
+                        <option value="weekly">รายสัปดาห์</option>
+                      </select>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => submitEditBudget(b.category)}
+                        className="mm-btn-3d mm-btn-primary flex-1 rounded-lg border-none bg-[var(--accent)] py-1.5 text-xs font-semibold text-[var(--accent-contrast)] cursor-pointer"
+                      >
+                        บันทึก
+                      </button>
+                      <button
+                        onClick={() => setEditingBudgetCategory(null)}
+                        className="mm-btn-3d flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-transparent cursor-pointer"
+                      >
+                        <X size={12} className="text-[var(--text-muted)]" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-[13px] font-semibold text-[var(--text-dark)]">
+                        {b.category}
+                        <span className="rounded-full bg-[var(--card-alt)] px-1.5 py-[1px] text-[9px] font-medium text-[var(--text-muted)]">
+                          {b.period === "weekly" ? "รายสัปดาห์" : "รายเดือน"}
+                        </span>
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            setEditingBudgetCategory(b.category);
+                            setEditBudgetDraft({
+                              amount: String(b.amount),
+                              period: b.period,
+                            });
+                          }}
+                          aria-label="แก้ไขงบประมาณ"
+                          className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer"
+                        >
+                          <Pencil
+                            size={11}
+                            className="text-[var(--text-muted)]"
+                          />
+                        </button>
+                        <button
+                          onClick={() => removeBudget(b.category)}
+                          aria-label="ลบงบประมาณ"
+                          className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer"
+                        >
+                          <X size={11} className="text-[var(--text-muted)]" />
+                        </button>
+                      </div>
+                    </div>
+                    <ProgressBar
+                      ratio={b.ratio}
+                      color={
+                        b.ratio >= 1
+                          ? "var(--expense)"
+                          : b.ratio >= 0.8
+                            ? "var(--warn)"
+                            : "var(--income)"
+                      }
+                    />
+                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                      <span>
+                        {formatBaht(b.spent)} / {formatBaht(b.amount)}
+                      </span>
+                      <span>{Math.round(b.ratio * 100)}%</span>
+                    </div>
+                    <p className="m-0 mt-1 text-[10px] text-[var(--text-muted)]">
+                      รีเซ็ตอัตโนมัติทุกต้น
+                      {b.period === "weekly" ? "สัปดาห์" : "เดือน"}{" "}
+                      ไม่ต้องบันทึกอะไรเพิ่ม
+                    </p>
+                  </>
+                )}
               </div>
-              <ProgressBar
-                ratio={b.ratio}
-                color={
-                  b.ratio >= 1
-                    ? "var(--expense)"
-                    : b.ratio >= 0.8
-                      ? "var(--warn)"
-                      : "var(--income)"
-                }
-              />
-              <div className="mt-1.5 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                <span>
-                  {formatBaht(b.spent)} / {formatBaht(b.amount)}
-                </span>
-                <span>{Math.round(b.ratio * 100)}%</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        <h4 className="m-0 mb-2.5 text-[13px] font-bold text-[var(--text-dark)]">
-          {budgets[newBudget.category] ? "แก้ไขงบประมาณ" : "เพิ่มงบประมาณใหม่"}
-        </h4>
-        <div className="mb-2.5 flex flex-col gap-2">
-          <select
-            value={newBudget.category}
-            onChange={(e) =>
-              setNewBudget((b) => ({
-                ...b,
-                category: e.target.value,
-                amount: budgets[e.target.value]?.amount
-                  ? String(budgets[e.target.value].amount)
-                  : "",
-                period: budgets[e.target.value]?.period || "monthly",
-              }))
-            }
-            className={inputCls}
-          >
-            {CATEGORY_OPTIONS.expense.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <div className="flex gap-1.5">
-            <input
-              type="number"
-              value={newBudget.amount}
-              onChange={(e) =>
-                setNewBudget((b) => ({ ...b, amount: e.target.value }))
-              }
-              placeholder="จำนวนเงินงบประมาณ (บาท)"
-              className={`${inputCls} flex-1`}
-            />
-            <select
-              value={newBudget.period}
-              onChange={(e) =>
-                setNewBudget((b) => ({ ...b, period: e.target.value }))
-              }
-              className={`${selectCls} w-[110px] shrink-0`}
-            >
-              <option value="monthly">รายเดือน</option>
-              <option value="weekly">รายสัปดาห์</option>
-            </select>
-          </div>
-        </div>
-        <button
-          onClick={addBudget}
-          className="mm-btn-3d mm-btn-primary w-full rounded-lg border-none bg-[var(--accent)] py-2.5 text-sm font-bold text-[var(--accent-contrast)] cursor-pointer"
-        >
-          {budgets[newBudget.category] ? "บันทึกการแก้ไข" : "+ เพิ่มงบประมาณ"}
-        </button>
+        {(() => {
+          const usedCategories = Object.keys(budgets);
+          const availableCategories = CATEGORY_OPTIONS.expense.filter(
+            (c) => !usedCategories.includes(c),
+          );
+
+          if (availableCategories.length === 0) {
+            return (
+              <p className="m-0 text-[11px] text-[var(--text-muted)]">
+                ตั้งงบประมาณครบทุกหมวดหมู่แล้ว กดไอคอนดินสอด้านบนเพื่อแก้ไข
+              </p>
+            );
+          }
+
+          return (
+            <>
+              <h4 className="m-0 mb-2.5 flex items-center gap-1.5 text-[13px] font-bold text-[var(--text-dark)]">
+                เพิ่มงบประมาณใหม่
+              </h4>
+              <div className="mb-2.5 flex flex-col gap-2">
+                <select
+                  value={
+                    availableCategories.includes(newBudget.category)
+                      ? newBudget.category
+                      : availableCategories[0]
+                  }
+                  onChange={(e) =>
+                    setNewBudget((b) => ({ ...b, category: e.target.value }))
+                  }
+                  className={inputCls}
+                >
+                  {availableCategories.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <div className="flex gap-1.5">
+                  <input
+                    type="number"
+                    value={newBudget.amount}
+                    onChange={(e) =>
+                      setNewBudget((b) => ({ ...b, amount: e.target.value }))
+                    }
+                    placeholder="จำนวนเงินงบประมาณ (บาท)"
+                    className={`${inputCls} flex-1`}
+                  />
+                  <select
+                    value={newBudget.period}
+                    onChange={(e) =>
+                      setNewBudget((b) => ({ ...b, period: e.target.value }))
+                    }
+                    className={`${selectCls} w-[110px] shrink-0`}
+                  >
+                    <option value="monthly">รายเดือน</option>
+                    <option value="weekly">รายสัปดาห์</option>
+                  </select>
+                </div>
+              </div>
+              <button
+                onClick={addBudget}
+                className="mm-btn-3d mm-btn-primary w-full rounded-lg border-none bg-[var(--accent)] py-2.5 text-sm font-bold text-[var(--accent-contrast)] cursor-pointer"
+              >
+                + เพิ่มงบประมาณ
+              </button>
+            </>
+          );
+        })()}
       </Modal>
     </div>
   );
