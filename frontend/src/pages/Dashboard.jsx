@@ -268,6 +268,16 @@ function getWeeksOfMonth(year, monthIndex) {
   }
   return weeks;
 }
+// คืนค่าสัปดาห์ของเดือนที่ "ยังเลือกได้" — ถ้าเป็นเดือนปัจจุบัน จะตัดสัปดาห์ที่ผ่านไปแล้วออก
+// เดือนอื่น (ล่วงหน้า/ย้อนหลังทั้งเดือน) ไม่กรอง เพราะผู้ใช้ตั้งใจเลือกเดือนนั้นอยู่แล้ว
+function getAvailableWeeksOfMonth(year, monthIndex) {
+  const weeks = getWeeksOfMonth(year, monthIndex);
+  const now = new Date();
+  const isCurrentMonth =
+    year === now.getFullYear() && monthIndex === now.getMonth();
+  if (!isCurrentMonth) return weeks;
+  return weeks.filter((w) => w.end >= now);
+}
 
 // สร้างตัวเลือกเดือน ย้อนหลัง 2 เดือน ถึงล่วงหน้า 6 เดือน ให้เลือกตั้งงบล่วงหน้าได้
 function getMonthOptions() {
@@ -276,7 +286,12 @@ function getMonthOptions() {
   for (let i = -2; i <= 6; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    options.push({ key, year: d.getFullYear(), monthIndex: d.getMonth(), label: monthLabel(key) });
+    options.push({
+      key,
+      year: d.getFullYear(),
+      monthIndex: d.getMonth(),
+      label: monthLabel(key),
+    });
   }
   return options;
 }
@@ -457,7 +472,8 @@ function MoneyInput({ value, onChange, className, placeholder, autoFocus }) {
     // อนุญาตแค่ตัวเลขกับจุดทศนิยมจุดเดียว ตัดคอมม่า/ตัวอักษรอื่นทิ้งหมด
     const cleaned = raw.replace(/,/g, "").replace(/[^\d.]/g, "");
     const parts = cleaned.split(".");
-    const safe = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join("")}` : cleaned;
+    const safe =
+      parts.length > 2 ? `${parts[0]}.${parts.slice(1).join("")}` : cleaned;
     onChange(safe);
   }
 
@@ -569,8 +585,8 @@ export default function Dashboard() {
       .then(setRecurringList)
       .catch(() => {});
     getSettings()
-  .then((s) => setBudgets(s.budgets || []))
-  .catch(() => {});
+      .then((s) => setBudgets(s.budgets || []))
+      .catch(() => {});
     getSavingsGoals()
       .then(setSavingsGoals)
       .catch(() => {}); // เพิ่มบรรทัดนี้
@@ -883,56 +899,72 @@ export default function Dashboard() {
   const catSize = 56 + catStatus.level * 14;
 
   function checkBudgetAfterAdd(tx) {
-  if (tx.type !== "expense") return;
-  const now = new Date();
-  const relevantBudgets = budgets.filter(
-    (b) => b.category === tx.category && now >= new Date(b.startDate) && now <= new Date(b.endDate),
-  );
-  relevantBudgets.forEach((budget) => {
-    const spent =
-      transactions
-        .filter((t) => {
-          if (t.type !== "expense" || t.category !== tx.category) return false;
-          const d = new Date(t.date);
-          return d >= new Date(budget.startDate) && d <= new Date(budget.endDate);
-        })
-        .reduce((s, t) => s + t.amount, 0) + tx.amount;
+    if (tx.type !== "expense") return;
+    const now = new Date();
+    const relevantBudgets = budgets.filter(
+      (b) =>
+        b.category === tx.category &&
+        now >= new Date(b.startDate) &&
+        now <= new Date(b.endDate),
+    );
+    relevantBudgets.forEach((budget) => {
+      const spent =
+        transactions
+          .filter((t) => {
+            if (t.type !== "expense" || t.category !== tx.category)
+              return false;
+            const d = new Date(t.date);
+            return (
+              d >= new Date(budget.startDate) && d <= new Date(budget.endDate)
+            );
+          })
+          .reduce((s, t) => s + t.amount, 0) + tx.amount;
 
-    if (spent > budget.amount) {
-      setTimeout(
-        () => showToast(`เหมียว! หมวด "${tx.category}" (${budget.label}) ใช้เกินงบแล้ว (${formatBaht(spent)}/${formatBaht(budget.amount)})`, "error"),
-        3300,
-      );
-    } else if (spent >= budget.amount * 0.8) {
-      setTimeout(
-        () => showToast(`เหมียว~ หมวด "${tx.category}" (${budget.label}) ใกล้เต็มงบแล้วนะ (${formatBaht(spent)}/${formatBaht(budget.amount)})`),
-        3300,
-      );
-    }
-  });
-}
+      if (spent > budget.amount) {
+        setTimeout(
+          () =>
+            showToast(
+              `เหมียว! หมวด "${tx.category}" (${budget.label}) ใช้เกินงบแล้ว (${formatBaht(spent)}/${formatBaht(budget.amount)})`,
+              "error",
+            ),
+          3300,
+        );
+      } else if (spent >= budget.amount * 0.8) {
+        setTimeout(
+          () =>
+            showToast(
+              `เหมียว~ หมวด "${tx.category}" (${budget.label}) ใกล้เต็มงบแล้วนะ (${formatBaht(spent)}/${formatBaht(budget.amount)})`,
+            ),
+          3300,
+        );
+      }
+    });
+  }
 
   const budgetProgress = useMemo(() => {
-  const now = new Date();
-  return budgets.map((b) => {
-    const start = new Date(b.startDate);
-    const end = new Date(b.endDate);
-    const spent = transactions
-      .filter((t) => {
-        if (t.type !== "expense" || t.category !== b.category) return false;
-        const d = new Date(t.date);
-        return d >= start && d <= end;
+    const now = new Date();
+    return budgets
+      .map((b) => {
+        const start = new Date(b.startDate);
+        const end = new Date(b.endDate);
+        const spent = transactions
+          .filter((t) => {
+            if (t.type !== "expense" || t.category !== b.category) return false;
+            const d = new Date(t.date);
+            return d >= start && d <= end;
+          })
+          .reduce((s, t) => s + t.amount, 0);
+        const status =
+          now < start ? "upcoming" : now > end ? "expired" : "active";
+        return { ...b, spent, ratio: spent / b.amount, status };
       })
-      .reduce((s, t) => s + t.amount, 0);
-    const status = now < start ? "upcoming" : now > end ? "expired" : "active";
-    return { ...b, spent, ratio: spent / b.amount, status };
-  }).sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
-}, [budgets, transactions]);
+      .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+  }, [budgets, transactions]);
 
-const activeBudgets = useMemo(
-  () => budgetProgress.filter((b) => b.status === "active"),
-  [budgetProgress],
-);
+  const activeBudgets = useMemo(
+    () => budgetProgress.filter((b) => b.status === "active"),
+    [budgetProgress],
+  );
   // const totalBalanceAllTime = useMemo(
   //   () =>
   //     transactions.reduce(
@@ -953,86 +985,94 @@ const activeBudgets = useMemo(
   }, [savingsGoals]);
 
   const [budgetModalOpen, setBudgetModalOpen] = useState(false);
-const [editingBudgetId, setEditingBudgetId] = useState(null);
-const [newBudget, setNewBudget] = useState({
-  category: CATEGORY_OPTIONS.expense[0],
-  amount: "",
-  monthKey: "", // จะ set ค่าเริ่มต้นตอนเปิด modal
-  periodType: "month", // "month" | "week"
-  weekIndex: 1,
-});
-const [editBudgetAmount, setEditBudgetAmount] = useState("");
+  const [editingBudgetId, setEditingBudgetId] = useState(null);
+  const [newBudget, setNewBudget] = useState({
+    category: CATEGORY_OPTIONS.expense[0],
+    amount: "",
+    monthKey: "", // จะ set ค่าเริ่มต้นตอนเปิด modal
+    periodType: "month", // "month" | "week"
+    weekIndex: 1,
+  });
+  const [editBudgetAmount, setEditBudgetAmount] = useState("");
 
   async function addBudget() {
-  if (!newBudget.amount || Number(newBudget.amount) <= 0) {
-    showToast("กรุณากรอกจำนวนเงินให้ถูกต้อง", "error");
-    return;
-  }
-  const [y, m] = newBudget.monthKey.split("-").map(Number);
-  const monthIndex = m - 1;
+    if (!newBudget.amount || Number(newBudget.amount) <= 0) {
+      showToast("กรุณากรอกจำนวนเงินให้ถูกต้อง", "error");
+      return;
+    }
 
-  let startDate, endDate, label;
-  if (newBudget.periodType === "month") {
-    startDate = new Date(y, monthIndex, 1);
-    endDate = new Date(y, monthIndex + 1, 0, 23, 59, 59);
-    label = monthLabel(newBudget.monthKey);
-  } else {
-    const weeks = getWeeksOfMonth(y, monthIndex);
-    const chosen = weeks.find((w) => w.index === Number(newBudget.weekIndex)) || weeks[0];
-    startDate = chosen.start;
-    endDate = chosen.end;
-    label = chosen.label;
+    // ใช้ fallback เดียวกับที่ dropdown เดือนแสดงผล กันกรณี monthKey ยังไม่เคยถูกเซ็ต
+    const effectiveMonthKey = newBudget.monthKey || getMonthOptions()[2].key;
+    const [y, m] = effectiveMonthKey.split("-").map(Number);
+    const monthIndex = m - 1;
+
+    let startDate, endDate, label;
+    if (newBudget.periodType === "month") {
+      startDate = new Date(y, monthIndex, 1);
+      endDate = new Date(y, monthIndex + 1, 0, 23, 59, 59);
+      label = monthLabel(effectiveMonthKey);
+    } else {
+      const weeks = getAvailableWeeksOfMonth(y, monthIndex);
+      if (weeks.length === 0) {
+        showToast("ไม่มีสัปดาห์ที่เลือกได้ในเดือนนี้แล้ว", "error");
+        return;
+      }
+      const chosen =
+        weeks.find((w) => w.index === Number(newBudget.weekIndex)) || weeks[0];
+      startDate = chosen.start;
+      endDate = chosen.end;
+      label = chosen.label;
+    }
+
+    const entry = {
+      category: newBudget.category,
+      amount: Number(newBudget.amount),
+      startDate,
+      endDate,
+      label,
+      periodType: newBudget.periodType,
+    };
+
+    try {
+      const updatedList = [...budgets, entry];
+      await updateSettings({ budgets: updatedList });
+      const s = await getSettings();
+      setBudgets(s.budgets || []);
+      setNewBudget((b) => ({ ...b, amount: "" }));
+      showToast("เพิ่มงบประมาณแล้ว");
+    } catch (err) {
+      showToast("เพิ่มงบประมาณไม่สำเร็จ", "error");
+    }
   }
 
-  const entry = {
-    category: newBudget.category,
-    amount: Number(newBudget.amount),
-    startDate,
-    endDate,
-    label,
-  };
+  async function submitEditBudget(id) {
+    if (!editBudgetAmount || Number(editBudgetAmount) <= 0) {
+      showToast("กรุณากรอกจำนวนเงินให้ถูกต้อง", "error");
+      return;
+    }
+    const updatedList = budgets.map((b) =>
+      b.id === id ? { ...b, amount: Number(editBudgetAmount) } : b,
+    );
+    try {
+      await updateSettings({ budgets: updatedList });
+      setBudgets(updatedList);
+      setEditingBudgetId(null);
+      showToast("แก้ไขงบประมาณแล้ว");
+    } catch (err) {
+      showToast("แก้ไขงบประมาณไม่สำเร็จ", "error");
+    }
+  }
 
-  try {
-    const updatedList = [...budgets, entry];
-    await updateSettings({ budgets: updatedList });
-    // โหลดใหม่จาก server เพื่อให้ได้ _id ที่ backend generate ให้
-    const s = await getSettings();
-    setBudgets(s.budgets || []);
-    setNewBudget((b) => ({ ...b, amount: "" }));
-    showToast("เพิ่มงบประมาณแล้ว");
-  } catch (err) {
-    showToast("เพิ่มงบประมาณไม่สำเร็จ", "error");
+  async function removeBudget(id) {
+    const updatedList = budgets.filter((b) => b.id !== id);
+    try {
+      await updateSettings({ budgets: updatedList });
+      setBudgets(updatedList);
+      showToast("ลบงบประมาณแล้ว", "error");
+    } catch (err) {
+      showToast("ลบงบประมาณไม่สำเร็จ", "error");
+    }
   }
-}
-
-async function submitEditBudget(id) {
-  if (!editBudgetAmount || Number(editBudgetAmount) <= 0) {
-    showToast("กรุณากรอกจำนวนเงินให้ถูกต้อง", "error");
-    return;
-  }
-  const updatedList = budgets.map((b) =>
-    b.id === id ? { ...b, amount: Number(editBudgetAmount) } : b,
-  );
-  try {
-    await updateSettings({ budgets: updatedList });
-    setBudgets(updatedList);
-    setEditingBudgetId(null);
-    showToast("แก้ไขงบประมาณแล้ว");
-  } catch (err) {
-    showToast("แก้ไขงบประมาณไม่สำเร็จ", "error");
-  }
-}
-
-async function removeBudget(id) {
-  const updatedList = budgets.filter((b) => b.id !== id);
-  try {
-    await updateSettings({ budgets: updatedList });
-    setBudgets(updatedList);
-    showToast("ลบงบประมาณแล้ว", "error");
-  } catch (err) {
-    showToast("ลบงบประมาณไม่สำเร็จ", "error");
-  }
-}
 
   function preprocessImage(file) {
     return new Promise((resolve, reject) => {
@@ -1602,14 +1642,14 @@ async function removeBudget(id) {
               />
             </div>
             <div className="flex items-center gap-2.5">
-              <button
+              {/* <button
                 onClick={openSettings}
                 aria-label="ตั้งค่า"
                 title="งบประมาณ / เป้าหมายออม / รายการเกิดซ้ำ"
                 className="mm-btn-3d flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card-alt)] cursor-pointer"
               >
                 <Settings size={15} className="text-[var(--text-dark)]" />
-              </button>
+              </button> */}
               <button
                 onClick={() => setDarkMode((d) => !d)}
                 aria-label={darkMode ? "สลับเป็นโหมดสว่าง" : "สลับเป็นโหมดมืด"}
@@ -1965,12 +2005,14 @@ async function removeBudget(id) {
                   className="flex w-full flex-col gap-2 border-none bg-transparent p-0 text-left cursor-pointer"
                 >
                   {activeBudgets.map((b) => (
-                    <div key={b.category}>
+                    <div key={b.id}>
+                      {" "}
+                      {/* เปลี่ยนจาก key={b.category} ด้วย ดูหมายเหตุด้านล่าง */}
                       <div className="mb-1 flex items-baseline justify-between text-[11px]">
                         <span className="flex items-center gap-1 font-semibold text-[var(--text-dark)]">
                           {b.category}
                           <span className="rounded-full bg-[var(--card-alt)] px-1.5 py-[1px] text-[9px] font-medium text-[var(--text-muted)]">
-                            {b.period === "weekly" ? "สัปดาห์" : "เดือน"}
+                            {b.periodType === "week" ? "สัปดาห์" : "เดือน"}
                           </span>
                         </span>
                         <span className="text-[var(--text-muted)]">
@@ -2166,12 +2208,12 @@ async function removeBudget(id) {
           )}
         </div>
         <label className={labelCls}>จำนวนเงิน (บาท)</label>
-<MoneyInput
-  value={form.amount}
-  onChange={(v) => setForm((f) => ({ ...f, amount: v }))}
-  placeholder="0"
-  className={`${inputCls} mb-3`}
-/>
+        <MoneyInput
+          value={form.amount}
+          onChange={(v) => setForm((f) => ({ ...f, amount: v }))}
+          placeholder="0"
+          className={`${inputCls} mb-3`}
+        />
         <label className={labelCls}>วันที่</label>
         <input
           type="date"
@@ -2346,13 +2388,16 @@ async function removeBudget(id) {
                   {cat}
                 </span>
                 <MoneyInput
-  value={draft.amount}
-  onChange={(v) =>
-    setBudgetDraft((d) => ({ ...d, [cat]: { ...draft, amount: v } }))
-  }
-  placeholder="ไม่ตั้งงบ"
-  className={`${inputCls} h-8 flex-1 text-xs`}
-/>
+                  value={draft.amount}
+                  onChange={(v) =>
+                    setBudgetDraft((d) => ({
+                      ...d,
+                      [cat]: { ...draft, amount: v },
+                    }))
+                  }
+                  placeholder="ไม่ตั้งงบ"
+                  className={`${inputCls} h-8 flex-1 text-xs`}
+                />
                 <select
                   value={draft.period}
                   onChange={(e) =>
@@ -2437,11 +2482,11 @@ async function removeBudget(id) {
         </div>
         <div className="mb-2.5 flex gap-1.5">
           <MoneyInput
-  value={newRecurring.amount}
-  onChange={(v) => setNewRecurring((r) => ({ ...r, amount: v }))}
-  placeholder="จำนวนเงิน"
-  className={`${inputCls} h-8 text-xs`}
-/>
+            value={newRecurring.amount}
+            onChange={(v) => setNewRecurring((r) => ({ ...r, amount: v }))}
+            placeholder="จำนวนเงิน"
+            className={`${inputCls} h-8 text-xs`}
+          />
           <input
             type="text"
             value={newRecurring.note}
@@ -2707,11 +2752,13 @@ async function removeBudget(id) {
                       className={`${inputCls} h-8 text-xs`}
                     />
                     <MoneyInput
-  value={editGoalDraft.target}
-  onChange={(v) => setEditGoalDraft((d) => ({ ...d, target: v }))}
-  placeholder="จำนวนเงินเป้าหมาย (บาท)"
-  className={`${inputCls} h-8 text-xs`}
-/>
+                      value={editGoalDraft.target}
+                      onChange={(v) =>
+                        setEditGoalDraft((d) => ({ ...d, target: v }))
+                      }
+                      placeholder="จำนวนเงินเป้าหมาย (บาท)"
+                      className={`${inputCls} h-8 text-xs`}
+                    />
                     <div className="flex gap-1.5">
                       <button
                         onClick={() => submitEditGoal(g.id)}
@@ -2775,12 +2822,12 @@ async function removeBudget(id) {
                     </p>
                     <div className="flex gap-1.5">
                       <MoneyInput
-  value={depositAmount}
-  onChange={setDepositAmount}
-  placeholder="จำนวนเงิน"
-  autoFocus
-  className={`${inputCls} h-8 flex-1 text-xs`}
-/>
+                        value={depositAmount}
+                        onChange={setDepositAmount}
+                        placeholder="จำนวนเงิน"
+                        autoFocus
+                        className={`${inputCls} h-8 flex-1 text-xs`}
+                      />
                       <button
                         onClick={() => submitDeposit(g.id)}
                         className="mm-btn-3d mm-btn-primary shrink-0 rounded-lg border-none bg-[var(--accent)] px-3 text-xs font-semibold text-[var(--accent-contrast)] cursor-pointer"
@@ -2831,11 +2878,11 @@ async function removeBudget(id) {
             className={inputCls}
           />
           <MoneyInput
-  value={newGoal.target}
-  onChange={(v) => setNewGoal((g) => ({ ...g, target: v }))}
-  placeholder="จำนวนเงินเป้าหมาย (บาท)"
-  className={inputCls}
-/>
+            value={newGoal.target}
+            onChange={(v) => setNewGoal((g) => ({ ...g, target: v }))}
+            placeholder="จำนวนเงินเป้าหมาย (บาท)"
+            className={inputCls}
+          />
         </div>
         <button
           onClick={addSavingsGoal}
@@ -3208,100 +3255,257 @@ async function removeBudget(id) {
       </Modal>
 
       {/* Budget modal */}
-<Modal open={budgetModalOpen} onClose={() => setBudgetModalOpen(false)} title="งบประมาณ" wide>
-  <div className="mb-4 flex flex-col gap-3">
-    {budgetProgress.length === 0 && (
-      <p className="m-0 text-[11px] text-[var(--text-muted)]">ยังไม่มีงบประมาณ เพิ่มได้เลยด้านล่าง</p>
-    )}
-    {budgetProgress.map((b) => {
-      const isEditing = editingBudgetId === b.id;
-      const statusLabel = b.status === "active" ? "กำลังใช้งาน" : b.status === "upcoming" ? "ยังไม่เริ่ม" : "หมดเขตแล้ว";
-      const statusColor = b.status === "active" ? "var(--income)" : b.status === "upcoming" ? "var(--accent)" : "var(--text-muted)";
-      return (
-        <div key={b.id} className="rounded-xl border border-[var(--border)] p-3" style={{ opacity: b.status === "expired" ? 0.6 : 1 }}>
-          <div className="mb-1.5 flex items-center justify-between">
-            <div className="min-w-0">
-              <span className="text-[13px] font-semibold text-[var(--text-dark)]">{b.category}</span>
-              <div className="flex items-center gap-1.5 text-[10px]">
-                <span style={{ color: statusColor }} className="font-semibold">{statusLabel}</span>
-                <span className="text-[var(--text-muted)]">· {b.label}</span>
+      <Modal
+        open={budgetModalOpen}
+        onClose={() => setBudgetModalOpen(false)}
+        title="งบประมาณ"
+        wide
+      >
+        <div className="mb-4 flex flex-col gap-3">
+          {budgetProgress.length === 0 && (
+            <p className="m-0 text-[11px] text-[var(--text-muted)]">
+              ยังไม่มีงบประมาณ เพิ่มได้เลยด้านล่าง
+            </p>
+          )}
+          {budgetProgress.map((b) => {
+            const isEditing = editingBudgetId === b.id;
+            const statusLabel =
+              b.status === "active"
+                ? "กำลังใช้งาน"
+                : b.status === "upcoming"
+                  ? "ยังไม่เริ่ม"
+                  : "หมดเขตแล้ว";
+            const statusColor =
+              b.status === "active"
+                ? "var(--income)"
+                : b.status === "upcoming"
+                  ? "var(--accent)"
+                  : "var(--text-muted)";
+            return (
+              <div
+                key={b.id}
+                className="rounded-xl border border-[var(--border)] p-3"
+                style={{ opacity: b.status === "expired" ? 0.6 : 1 }}
+              >
+                <div className="mb-1.5 flex items-center justify-between">
+                  <div className="min-w-0">
+                    <span className="text-[13px] font-semibold text-[var(--text-dark)]">
+                      {b.category}
+                    </span>
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                      <span
+                        style={{ color: statusColor }}
+                        className="font-semibold"
+                      >
+                        {statusLabel}
+                      </span>
+                      <span className="text-[var(--text-muted)]">
+                        · {b.label}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      onClick={() => {
+                        setEditingBudgetId(b.id);
+                        setEditBudgetAmount(String(b.amount));
+                      }}
+                      aria-label="แก้ไขงบประมาณ"
+                      className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer"
+                    >
+                      <Pencil size={11} className="text-[var(--text-muted)]" />
+                    </button>
+                    <button
+                      onClick={() => removeBudget(b.id)}
+                      aria-label="ลบงบประมาณ"
+                      className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer"
+                    >
+                      <X size={11} className="text-[var(--text-muted)]" />
+                    </button>
+                  </div>
+                </div>
+
+                {isEditing ? (
+                  <div className="flex gap-1.5">
+                    <MoneyInput
+                      value={editBudgetAmount}
+                      onChange={setEditBudgetAmount}
+                      autoFocus
+                      className={`${inputCls} h-8 flex-1 text-xs`}
+                    />
+                    <button
+                      onClick={() => submitEditBudget(b.id)}
+                      className="mm-btn-3d mm-btn-primary shrink-0 rounded-lg border-none bg-[var(--accent)] px-3 text-xs font-semibold text-[var(--accent-contrast)] cursor-pointer"
+                    >
+                      บันทึก
+                    </button>
+                    <button
+                      onClick={() => setEditingBudgetId(null)}
+                      className="mm-btn-3d flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-transparent cursor-pointer"
+                    >
+                      <X size={12} className="text-[var(--text-muted)]" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <ProgressBar
+                      ratio={b.ratio}
+                      color={
+                        b.ratio >= 1
+                          ? "var(--expense)"
+                          : b.ratio >= 0.8
+                            ? "var(--warn)"
+                            : "var(--income)"
+                      }
+                    />
+                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                      <span>
+                        {formatBaht(b.spent)} / {formatBaht(b.amount)}
+                      </span>
+                      <span>{Math.round(b.ratio * 100)}%</span>
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <button onClick={() => { setEditingBudgetId(b.id); setEditBudgetAmount(String(b.amount)); }} aria-label="แก้ไขงบประมาณ" className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer">
-                <Pencil size={11} className="text-[var(--text-muted)]" />
-              </button>
-              <button onClick={() => removeBudget(b.id)} aria-label="ลบงบประมาณ" className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer">
-                <X size={11} className="text-[var(--text-muted)]" />
-              </button>
-            </div>
+            );
+          })}
+        </div>
+
+        <h4 className="m-0 mb-2.5 flex items-center gap-1.5 text-[13px] font-bold text-[var(--text-dark)]">
+          เพิ่มงบประมาณใหม่
+        </h4>
+        <div className="mb-2.5 flex flex-col gap-2">
+          <select
+            value={newBudget.category}
+            onChange={(e) =>
+              setNewBudget((b) => ({ ...b, category: e.target.value }))
+            }
+            className={inputCls}
+          >
+            {CATEGORY_OPTIONS.expense.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+
+          <MoneyInput
+            value={newBudget.amount}
+            onChange={(v) => setNewBudget((b) => ({ ...b, amount: v }))}
+            placeholder="จำนวนเงินงบประมาณ (บาท)"
+            className={inputCls}
+          />
+
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() =>
+                setNewBudget((b) => ({ ...b, periodType: "month" }))
+              }
+              className="flex-1 rounded-lg py-2 text-xs font-semibold cursor-pointer"
+              style={{
+                border: `1px solid ${newBudget.periodType === "month" ? "var(--accent)" : "var(--border)"}`,
+                background:
+                  newBudget.periodType === "month"
+                    ? "var(--accent)"
+                    : "var(--card)",
+                color:
+                  newBudget.periodType === "month"
+                    ? "var(--accent-contrast)"
+                    : "var(--text-dark)",
+              }}
+            >
+              ทั้งเดือน
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setNewBudget((b) => {
+                  const mk = b.monthKey || getMonthOptions()[2].key;
+                  const [y, m] = mk.split("-").map(Number);
+                  const availableWeeks = getAvailableWeeksOfMonth(y, m - 1);
+                  return {
+                    ...b,
+                    periodType: "week",
+                    weekIndex: availableWeeks[0]?.index || 1,
+                  };
+                });
+              }}
+              className="flex-1 rounded-lg py-2 text-xs font-semibold cursor-pointer"
+              style={{
+                border: `1px solid ${newBudget.periodType === "week" ? "var(--accent)" : "var(--border)"}`,
+                background:
+                  newBudget.periodType === "week"
+                    ? "var(--accent)"
+                    : "var(--card)",
+                color:
+                  newBudget.periodType === "week"
+                    ? "var(--accent-contrast)"
+                    : "var(--text-dark)",
+              }}
+            >
+              รายสัปดาห์
+            </button>
           </div>
 
-          {isEditing ? (
-            <div className="flex gap-1.5">
-             <MoneyInput value={editBudgetAmount} onChange={setEditBudgetAmount} autoFocus className={`${inputCls} h-8 flex-1 text-xs`} />
-              <button onClick={() => submitEditBudget(b.id)} className="mm-btn-3d mm-btn-primary shrink-0 rounded-lg border-none bg-[var(--accent)] px-3 text-xs font-semibold text-[var(--accent-contrast)] cursor-pointer">บันทึก</button>
-              <button onClick={() => setEditingBudgetId(null)} className="mm-btn-3d flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-transparent cursor-pointer">
-                <X size={12} className="text-[var(--text-muted)]" />
-              </button>
-            </div>
-          ) : (
-            <>
-              <ProgressBar ratio={b.ratio} color={b.ratio >= 1 ? "var(--expense)" : b.ratio >= 0.8 ? "var(--warn)" : "var(--income)"} />
-              <div className="mt-1.5 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                <span>{formatBaht(b.spent)} / {formatBaht(b.amount)}</span>
-                <span>{Math.round(b.ratio * 100)}%</span>
-              </div>
-            </>
+          <select
+            value={newBudget.monthKey || getMonthOptions()[2].key}
+            onChange={(e) => {
+              const [y, m] = e.target.value.split("-").map(Number);
+              const availableWeeks = getAvailableWeeksOfMonth(y, m - 1);
+              setNewBudget((b) => ({
+                ...b,
+                monthKey: e.target.value,
+                weekIndex: availableWeeks[0]?.index || 1,
+              }));
+            }}
+            className={inputCls}
+          >
+            {getMonthOptions().map((m) => (
+              <option key={m.key} value={m.key}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+
+          {newBudget.periodType === "week" && (
+            <select
+              value={newBudget.weekIndex}
+              onChange={(e) =>
+                setNewBudget((b) => ({
+                  ...b,
+                  weekIndex: Number(e.target.value),
+                }))
+              }
+              className={inputCls}
+            >
+              {(() => {
+                const mk = newBudget.monthKey || getMonthOptions()[2].key;
+                const [y, m] = mk.split("-").map(Number);
+                const availableWeeks = getAvailableWeeksOfMonth(y, m - 1);
+                if (availableWeeks.length === 0) {
+                  return (
+                    <option value="">
+                      ไม่มีสัปดาห์ที่เลือกได้ในเดือนนี้แล้ว
+                    </option>
+                  );
+                }
+                return availableWeeks.map((w) => (
+                  <option key={w.index} value={w.index}>
+                    {w.label}
+                  </option>
+                ));
+              })()}
+            </select>
           )}
         </div>
-      );
-    })}
-  </div>
-
-  <h4 className="m-0 mb-2.5 flex items-center gap-1.5 text-[13px] font-bold text-[var(--text-dark)]">
-    เพิ่มงบประมาณใหม่
-  </h4>
-  <div className="mb-2.5 flex flex-col gap-2">
-    <select value={newBudget.category} onChange={(e) => setNewBudget((b) => ({ ...b, category: e.target.value }))} className={inputCls}>
-      {CATEGORY_OPTIONS.expense.map((c) => <option key={c} value={c}>{c}</option>)}
-    </select>
-
-    <MoneyInput value={newBudget.amount} onChange={(v) => setNewBudget((b) => ({ ...b, amount: v }))} placeholder="จำนวนเงินงบประมาณ (บาท)" className={inputCls} />
-
-    <div className="flex gap-1.5">
-      <button type="button" onClick={() => setNewBudget((b) => ({ ...b, periodType: "month" }))} className="flex-1 rounded-lg py-2 text-xs font-semibold cursor-pointer" style={{ border: `1px solid ${newBudget.periodType === "month" ? "var(--accent)" : "var(--border)"}`, background: newBudget.periodType === "month" ? "var(--accent)" : "var(--card)", color: newBudget.periodType === "month" ? "var(--accent-contrast)" : "var(--text-dark)" }}>
-        ทั้งเดือน
-      </button>
-      <button type="button" onClick={() => setNewBudget((b) => ({ ...b, periodType: "week" }))} className="flex-1 rounded-lg py-2 text-xs font-semibold cursor-pointer" style={{ border: `1px solid ${newBudget.periodType === "week" ? "var(--accent)" : "var(--border)"}`, background: newBudget.periodType === "week" ? "var(--accent)" : "var(--card)", color: newBudget.periodType === "week" ? "var(--accent-contrast)" : "var(--text-dark)" }}>
-        รายสัปดาห์
-      </button>
-    </div>
-
-    <select
-      value={newBudget.monthKey || getMonthOptions()[2].key}
-      onChange={(e) => setNewBudget((b) => ({ ...b, monthKey: e.target.value, weekIndex: 1 }))}
-      className={inputCls}
-    >
-      {getMonthOptions().map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
-    </select>
-
-    {newBudget.periodType === "week" && (
-      <select value={newBudget.weekIndex} onChange={(e) => setNewBudget((b) => ({ ...b, weekIndex: Number(e.target.value) }))} className={inputCls}>
-        {(() => {
-          const mk = newBudget.monthKey || getMonthOptions()[2].key;
-          const [y, m] = mk.split("-").map(Number);
-          return getWeeksOfMonth(y, m - 1).map((w) => (
-            <option key={w.index} value={w.index}>{w.label}</option>
-          ));
-        })()}
-      </select>
-    )}
-  </div>
-  <button onClick={addBudget} className="mm-btn-3d mm-btn-primary w-full rounded-lg border-none bg-[var(--accent)] py-2.5 text-sm font-bold text-[var(--accent-contrast)] cursor-pointer">
-    + เพิ่มงบประมาณ
-  </button>
-</Modal>
+        <button
+          onClick={addBudget}
+          className="mm-btn-3d mm-btn-primary w-full rounded-lg border-none bg-[var(--accent)] py-2.5 text-sm font-bold text-[var(--accent-contrast)] cursor-pointer"
+        >
+          + เพิ่มงบประมาณ
+        </button>
+      </Modal>
     </div>
   );
 }

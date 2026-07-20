@@ -7,6 +7,7 @@ const budgetItemSchema = new mongoose.Schema(
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
     label: { type: String, default: '' },
+    periodType: { type: String, enum: ['month', 'week'], default: 'month' },
   },
   { timestamps: true }
 );
