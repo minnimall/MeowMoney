@@ -185,7 +185,7 @@ const INCOME_KEYWORDS = {
   รายได้เสริม: ["ขายของ", "รายได้เสริม", "freelance", "ฟรีแลนซ์"],
 };
 
-const currentUser = getStoredUser();
+// const currentUser = getStoredUser();
 // เก็บแค่ preference ของเครื่อง (darkMode) ไว้ใน localStorage เท่านั้น
 // ข้อมูลอื่น (transactions, favorites, recurring, budgets, savingsGoal) ย้ายไปเก็บใน MongoDB ผ่าน API แล้ว
 const DARKMODE_KEY = "meowmoney_darkmode";
@@ -441,8 +441,41 @@ function EmptyState({ label }) {
     </div>
   );
 }
+// Input สำหรับกรอกจำนวนเงิน แสดงคอมม่าคั่นหลักพันอัตโนมัติ (เช่น 15,000)
+// เก็บค่าจริงเป็นตัวเลขล้วน (ไม่มีคอมม่า) ใน state ของ parent เสมอ ส่วน component
+// นี้แค่จัดการการแสดงผลเท่านั้น
+function MoneyInput({ value, onChange, className, placeholder, autoFocus }) {
+  function formatDisplay(v) {
+    if (v === "" || v === null || v === undefined) return "";
+    const [intPart, decPart] = String(v).split(".");
+    const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return decPart !== undefined ? `${withCommas}.${decPart}` : withCommas;
+  }
+
+  function handleChange(e) {
+    const raw = e.target.value;
+    // อนุญาตแค่ตัวเลขกับจุดทศนิยมจุดเดียว ตัดคอมม่า/ตัวอักษรอื่นทิ้งหมด
+    const cleaned = raw.replace(/,/g, "").replace(/[^\d.]/g, "");
+    const parts = cleaned.split(".");
+    const safe = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join("")}` : cleaned;
+    onChange(safe);
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={formatDisplay(value)}
+      onChange={handleChange}
+      placeholder={placeholder}
+      autoFocus={autoFocus}
+      className={className}
+    />
+  );
+}
 
 export default function Dashboard() {
+  const currentUser = getStoredUser();
   const [darkMode, setDarkMode] = useState(false);
   const C = darkMode ? THEMES.dark : THEMES.light;
   const [alsoSaveFavorite, setAlsoSaveFavorite] = useState(false);
@@ -2133,13 +2166,12 @@ async function removeBudget(id) {
           )}
         </div>
         <label className={labelCls}>จำนวนเงิน (บาท)</label>
-        <input
-          type="number"
-          value={form.amount}
-          onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-          placeholder="0"
-          className={`${inputCls} mb-3`}
-        />
+<MoneyInput
+  value={form.amount}
+  onChange={(v) => setForm((f) => ({ ...f, amount: v }))}
+  placeholder="0"
+  className={`${inputCls} mb-3`}
+/>
         <label className={labelCls}>วันที่</label>
         <input
           type="date"
@@ -2313,18 +2345,14 @@ async function removeBudget(id) {
                 <span className="w-[76px] shrink-0 text-xs text-[var(--text-dark)]">
                   {cat}
                 </span>
-                <input
-                  type="number"
-                  value={draft.amount}
-                  onChange={(e) =>
-                    setBudgetDraft((d) => ({
-                      ...d,
-                      [cat]: { ...draft, amount: e.target.value },
-                    }))
-                  }
-                  placeholder="ไม่ตั้งงบ"
-                  className={`${inputCls} h-8 flex-1 text-xs`}
-                />
+                <MoneyInput
+  value={draft.amount}
+  onChange={(v) =>
+    setBudgetDraft((d) => ({ ...d, [cat]: { ...draft, amount: v } }))
+  }
+  placeholder="ไม่ตั้งงบ"
+  className={`${inputCls} h-8 flex-1 text-xs`}
+/>
                 <select
                   value={draft.period}
                   onChange={(e) =>
@@ -2408,15 +2436,12 @@ async function removeBudget(id) {
           </select>
         </div>
         <div className="mb-2.5 flex gap-1.5">
-          <input
-            type="number"
-            value={newRecurring.amount}
-            onChange={(e) =>
-              setNewRecurring((r) => ({ ...r, amount: e.target.value }))
-            }
-            placeholder="จำนวนเงิน"
-            className={`${inputCls} h-8 text-xs`}
-          />
+          <MoneyInput
+  value={newRecurring.amount}
+  onChange={(v) => setNewRecurring((r) => ({ ...r, amount: v }))}
+  placeholder="จำนวนเงิน"
+  className={`${inputCls} h-8 text-xs`}
+/>
           <input
             type="text"
             value={newRecurring.note}
@@ -2681,18 +2706,12 @@ async function removeBudget(id) {
                       placeholder="ชื่อเป้าหมาย"
                       className={`${inputCls} h-8 text-xs`}
                     />
-                    <input
-                      type="number"
-                      value={editGoalDraft.target}
-                      onChange={(e) =>
-                        setEditGoalDraft((d) => ({
-                          ...d,
-                          target: e.target.value,
-                        }))
-                      }
-                      placeholder="จำนวนเงินเป้าหมาย (บาท)"
-                      className={`${inputCls} h-8 text-xs`}
-                    />
+                    <MoneyInput
+  value={editGoalDraft.target}
+  onChange={(v) => setEditGoalDraft((d) => ({ ...d, target: v }))}
+  placeholder="จำนวนเงินเป้าหมาย (บาท)"
+  className={`${inputCls} h-8 text-xs`}
+/>
                     <div className="flex gap-1.5">
                       <button
                         onClick={() => submitEditGoal(g.id)}
@@ -2755,14 +2774,13 @@ async function removeBudget(id) {
                       คงเหลือปัจจุบัน: {formatBaht(overallTotals.balance)}
                     </p>
                     <div className="flex gap-1.5">
-                      <input
-                        type="number"
-                        value={depositAmount}
-                        onChange={(e) => setDepositAmount(e.target.value)}
-                        placeholder="จำนวนเงิน"
-                        autoFocus
-                        className={`${inputCls} h-8 flex-1 text-xs`}
-                      />
+                      <MoneyInput
+  value={depositAmount}
+  onChange={setDepositAmount}
+  placeholder="จำนวนเงิน"
+  autoFocus
+  className={`${inputCls} h-8 flex-1 text-xs`}
+/>
                       <button
                         onClick={() => submitDeposit(g.id)}
                         className="mm-btn-3d mm-btn-primary shrink-0 rounded-lg border-none bg-[var(--accent)] px-3 text-xs font-semibold text-[var(--accent-contrast)] cursor-pointer"
@@ -2812,15 +2830,12 @@ async function removeBudget(id) {
             placeholder="ชื่อเป้าหมาย เช่น ซื้อแล็ปท็อป"
             className={inputCls}
           />
-          <input
-            type="number"
-            value={newGoal.target}
-            onChange={(e) =>
-              setNewGoal((g) => ({ ...g, target: e.target.value }))
-            }
-            placeholder="จำนวนเงินเป้าหมาย (บาท)"
-            className={inputCls}
-          />
+          <MoneyInput
+  value={newGoal.target}
+  onChange={(v) => setNewGoal((g) => ({ ...g, target: v }))}
+  placeholder="จำนวนเงินเป้าหมาย (บาท)"
+  className={inputCls}
+/>
         </div>
         <button
           onClick={addSavingsGoal}
@@ -3224,7 +3239,7 @@ async function removeBudget(id) {
 
           {isEditing ? (
             <div className="flex gap-1.5">
-              <input type="number" value={editBudgetAmount} onChange={(e) => setEditBudgetAmount(e.target.value)} autoFocus className={`${inputCls} h-8 flex-1 text-xs`} />
+             <MoneyInput value={editBudgetAmount} onChange={setEditBudgetAmount} autoFocus className={`${inputCls} h-8 flex-1 text-xs`} />
               <button onClick={() => submitEditBudget(b.id)} className="mm-btn-3d mm-btn-primary shrink-0 rounded-lg border-none bg-[var(--accent)] px-3 text-xs font-semibold text-[var(--accent-contrast)] cursor-pointer">บันทึก</button>
               <button onClick={() => setEditingBudgetId(null)} className="mm-btn-3d flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-transparent cursor-pointer">
                 <X size={12} className="text-[var(--text-muted)]" />
@@ -3252,7 +3267,7 @@ async function removeBudget(id) {
       {CATEGORY_OPTIONS.expense.map((c) => <option key={c} value={c}>{c}</option>)}
     </select>
 
-    <input type="number" value={newBudget.amount} onChange={(e) => setNewBudget((b) => ({ ...b, amount: e.target.value }))} placeholder="จำนวนเงินงบประมาณ (บาท)" className={inputCls} />
+    <MoneyInput value={newBudget.amount} onChange={(v) => setNewBudget((b) => ({ ...b, amount: v }))} placeholder="จำนวนเงินงบประมาณ (บาท)" className={inputCls} />
 
     <div className="flex gap-1.5">
       <button type="button" onClick={() => setNewBudget((b) => ({ ...b, periodType: "month" }))} className="flex-1 rounded-lg py-2 text-xs font-semibold cursor-pointer" style={{ border: `1px solid ${newBudget.periodType === "month" ? "var(--accent)" : "var(--border)"}`, background: newBudget.periodType === "month" ? "var(--accent)" : "var(--card)", color: newBudget.periodType === "month" ? "var(--accent-contrast)" : "var(--text-dark)" }}>

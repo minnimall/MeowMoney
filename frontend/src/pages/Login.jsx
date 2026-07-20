@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { login, register } from '../services/authService';
+import { login, register } from "../services/authService";
 import logoMeowMoney from "../assets/logomeowv2.png";
 import {
   Mail,
@@ -150,25 +150,31 @@ export default function AuthPage() {
   }
 
   async function handleSubmit(ev) {
-  ev.preventDefault();
-  const e = mode === 'login' ? validateLogin() : validateRegister();
-  setErrors(e);
-  if (Object.keys(e).length) return;
+    ev.preventDefault();
+    const e = mode === "login" ? validateLogin() : validateRegister();
+    setErrors(e);
+    if (Object.keys(e).length) return;
 
-  setSubmitting(true);
-  try {
-    if (mode === 'login') {
-      await login(loginForm);
-    } else {
-      await register({ username: regForm.name, email: regForm.email, password: regForm.password });
+    setSubmitting(true);
+    try {
+      if (mode === "login") {
+        await login(loginForm);
+      } else {
+        await register({
+          username: regForm.name,
+          email: regForm.email,
+          password: regForm.password,
+        });
+      }
+      navigate("/");
+    } catch (err) {
+      setErrors({
+        email: err.response?.data?.message || "เกิดข้อผิดพลาด กรุณาลองใหม่",
+      });
+    } finally {
+      setSubmitting(false);
     }
-    navigate('/');
-  } catch (err) {
-    setErrors({ email: err.response?.data?.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่' });
-  } finally {
-    setSubmitting(false);
   }
-}
 
   function switchMode(next) {
     setMode(next);
@@ -208,17 +214,17 @@ export default function AuthPage() {
             </div>
 
             <div className="relative z-10 flex items-center gap-2 text-white">
-  <div className="mm-float flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white/15">
-    <img
-      src={logoMeowMoney}
-      alt="MeowMoney"
-      className="h-full w-full object-contain p-1.5"
-    />
-  </div>
-  <span className="text-lg font-extrabold tracking-tight">
-    MeowMoney
-  </span>
-</div>
+              <div className="mm-float flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white/15">
+                <img
+                  src={logoMeowMoney}
+                  alt="MeowMoney"
+                  className="h-full w-full object-contain p-1.5"
+                />
+              </div>
+              <span className="text-lg font-extrabold tracking-tight">
+                MeowMoney
+              </span>
+            </div>
 
             <div className="relative z-10 text-white">
               <h2 className="m-0 mb-2 text-[26px] font-extrabold leading-tight">
@@ -302,7 +308,7 @@ export default function AuthPage() {
 
             <div className="mm-panel-switch">
               <h1 className="m-0 mb-1 text-xl font-extrabold text-[var(--text-dark)]">
-                {mode === "login" ? "ยินดีต้อนรับกลับมา 👋" : "สร้างบัญชีใหม่"}
+                {mode === "login" ? "ยินดีต้อนรับ 👋" : "สร้างบัญชีใหม่"}
               </h1>
               <p className="m-0 mb-6 text-[13px] text-[var(--text-muted)]">
                 {mode === "login"
