@@ -1627,7 +1627,7 @@ export default function Dashboard() {
               <button
                 onClick={openAddForm}
                 aria-label="เพิ่มรายการ"
-                className="mm-btn-3d mm-btn-primary flex h-9 w-9 shrink-0 items-center justify-center gap-1.5 rounded-full border-none text-xs font-semibold text-white cursor-pointer sm:h-8 sm:w-auto sm:px-3"
+                className="mm-btn-3d mm-btn-primary flex h-11 w-11 shrink-0 items-center justify-center gap-1.5 rounded-full border-none text-xs font-semibold text-white cursor-pointer sm:h-8 sm:w-auto sm:px-3"
                 style={{
                   backgroundImage:
                     "linear-gradient(135deg, var(--accent) 0%, var(--accent-pink) 100%)",
