@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login, register } from '../services/authService';
+import logoMeowMoney from "../assets/logomeowv2.png";
 import {
   Mail,
   Lock,
@@ -58,37 +59,6 @@ const THEMES = {
     shadowFloat: "0 24px 50px rgba(0,0,0,0.55)",
   },
 };
-
-function CatMark({ size = 40, color }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-      <ellipse cx="32" cy="35" rx="23" ry="19" fill={color} />
-      <polygon points="12,20 22,3 27,21" fill={color} />
-      <polygon points="52,20 42,3 37,21" fill={color} />
-      <path
-        d="M20 32 Q24 28 28 32"
-        stroke="#4e342e"
-        strokeWidth="2"
-        fill="none"
-        strokeLinecap="round"
-      />
-      <path
-        d="M36 32 Q40 28 44 32"
-        stroke="#4e342e"
-        strokeWidth="2"
-        fill="none"
-        strokeLinecap="round"
-      />
-      <path
-        d="M25 41 Q32 47 39 41"
-        stroke="#4e342e"
-        strokeWidth="2.5"
-        fill="none"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 function PawIcon({ size = 70, color = "#ffffff" }) {
   return (
@@ -238,13 +208,17 @@ export default function AuthPage() {
             </div>
 
             <div className="relative z-10 flex items-center gap-2 text-white">
-              <div className="mm-float flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
-                <CatMark size={26} color="#ffffff" />
-              </div>
-              <span className="text-lg font-extrabold tracking-tight">
-                MeowMoney
-              </span>
-            </div>
+  <div className="mm-float flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white/15">
+    <img
+      src={logoMeowMoney}
+      alt="MeowMoney"
+      className="h-full w-full object-contain p-1.5"
+    />
+  </div>
+  <span className="text-lg font-extrabold tracking-tight">
+    MeowMoney
+  </span>
+</div>
 
             <div className="relative z-10 text-white">
               <h2 className="m-0 mb-2 text-[26px] font-extrabold leading-tight">

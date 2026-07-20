@@ -241,6 +241,45 @@ function weekKey(d) {
   const weekNo = Math.ceil(((dt - yearStart) / 86400000 + 1) / 7);
   return `${dt.getFullYear()}-W${String(weekNo).padStart(2, "0")}`;
 }
+// แบ่งเดือนออกเป็น "สัปดาห์" ตามปฏิทินจริง (จันทร์-อาทิตย์)
+// สัปดาห์แรก/สัปดาห์สุดท้ายของเดือนอาจสั้นกว่า 7 วัน ถ้าวันที่ 1 หรือวันสุดท้ายของเดือน
+// ไม่ได้ตรงกับวันจันทร์/อาทิตย์พอดี เช่น ก.ค. 2569 วันที่ 1 เป็นวันพุธ
+// สัปดาห์แรกจะเป็น พ.-อา. (1-5) แล้วสัปดาห์ถัดไปค่อยเริ่มจันทร์เต็มสัปดาห์
+function getWeeksOfMonth(year, monthIndex) {
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const weeks = [];
+  let day = 1;
+  let weekNo = 1;
+  while (day <= daysInMonth) {
+    const startDate = new Date(year, monthIndex, day);
+    const dow = startDate.getDay(); // 0=อาทิตย์, 1=จันทร์, ..., 6=เสาร์
+    const daysUntilSunday = (7 - dow) % 7; // ถ้าวันนี้เป็นอาทิตย์อยู่แล้ว = 0
+    const endDay = Math.min(day + daysUntilSunday, daysInMonth);
+    const start = new Date(year, monthIndex, day);
+    const end = new Date(year, monthIndex, endDay, 23, 59, 59);
+    weeks.push({
+      index: weekNo,
+      start,
+      end,
+      label: `สัปดาห์ ${weekNo} (${day}-${endDay} ${monthShortLabel(`${year}-${String(monthIndex + 1).padStart(2, "0")}`)})`,
+    });
+    day = endDay + 1;
+    weekNo++;
+  }
+  return weeks;
+}
+
+// สร้างตัวเลือกเดือน ย้อนหลัง 2 เดือน ถึงล่วงหน้า 6 เดือน ให้เลือกตั้งงบล่วงหน้าได้
+function getMonthOptions() {
+  const now = new Date();
+  const options = [];
+  for (let i = -2; i <= 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    options.push({ key, year: d.getFullYear(), monthIndex: d.getMonth(), label: monthLabel(key) });
+  }
+  return options;
+}
 function monthLabel(key) {
   const [y, m] = key.split("-");
   return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("th-TH", {
@@ -476,7 +515,7 @@ export default function Dashboard() {
   const [profileOpen, setProfileOpen] = useState(false);
 
   // ---------- ข้อมูลที่เดิมเคยเก็บ localStorage ตอนนี้มาจาก API แล้ว ----------
-  const [budgets, setBudgets] = useState({});
+  const [budgets, setBudgets] = useState([]);
   const [savingsGoals, setSavingsGoals] = useState([]);
   const [savingsModalOpen, setSavingsModalOpen] = useState(false);
   const [newGoal, setNewGoal] = useState({ name: "", target: "" });
@@ -497,8 +536,8 @@ export default function Dashboard() {
       .then(setRecurringList)
       .catch(() => {});
     getSettings()
-      .then((s) => setBudgets(s.budgets || {}))
-      .catch(() => {});
+  .then((s) => setBudgets(s.budgets || []))
+  .catch(() => {});
     getSavingsGoals()
       .then(setSavingsGoals)
       .catch(() => {}); // เพิ่มบรรทัดนี้
@@ -811,73 +850,56 @@ export default function Dashboard() {
   const catSize = 56 + catStatus.level * 14;
 
   function checkBudgetAfterAdd(tx) {
-    if (tx.type !== "expense") return;
-    const budget = budgets[tx.category];
-    if (!budget || budget.amount <= 0) return;
-
-    const period = budget.period === "weekly" ? "weekly" : "monthly";
-    const nowKey =
-      period === "weekly" ? weekKey(new Date()) : monthKey(new Date());
-    const keyFn = period === "weekly" ? weekKey : monthKey;
-
-    const spentThisPeriod =
+  if (tx.type !== "expense") return;
+  const now = new Date();
+  const relevantBudgets = budgets.filter(
+    (b) => b.category === tx.category && now >= new Date(b.startDate) && now <= new Date(b.endDate),
+  );
+  relevantBudgets.forEach((budget) => {
+    const spent =
       transactions
-        .filter(
-          (t) =>
-            t.type === "expense" &&
-            t.category === tx.category &&
-            keyFn(t.date) === nowKey,
-        )
+        .filter((t) => {
+          if (t.type !== "expense" || t.category !== tx.category) return false;
+          const d = new Date(t.date);
+          return d >= new Date(budget.startDate) && d <= new Date(budget.endDate);
+        })
         .reduce((s, t) => s + t.amount, 0) + tx.amount;
 
-    const periodLabel = period === "weekly" ? "สัปดาห์นี้" : "เดือนนี้";
-
-    if (spentThisPeriod > budget.amount) {
+    if (spent > budget.amount) {
       setTimeout(
-        () =>
-          showToast(
-            `เหมียว! หมวด "${tx.category}" ใช้เกินงบ${periodLabel}แล้ว (${formatBaht(spentThisPeriod)}/${formatBaht(budget.amount)})`,
-            "error",
-          ),
+        () => showToast(`เหมียว! หมวด "${tx.category}" (${budget.label}) ใช้เกินงบแล้ว (${formatBaht(spent)}/${formatBaht(budget.amount)})`, "error"),
         3300,
       );
-    } else if (spentThisPeriod >= budget.amount * 0.8) {
+    } else if (spent >= budget.amount * 0.8) {
       setTimeout(
-        () =>
-          showToast(
-            `เหมียว~ หมวด "${tx.category}" ใกล้เต็มงบ${periodLabel}แล้วนะ (${formatBaht(spentThisPeriod)}/${formatBaht(budget.amount)})`,
-          ),
+        () => showToast(`เหมียว~ หมวด "${tx.category}" (${budget.label}) ใกล้เต็มงบแล้วนะ (${formatBaht(spent)}/${formatBaht(budget.amount)})`),
         3300,
       );
     }
-  }
+  });
+}
 
   const budgetProgress = useMemo(() => {
-    const nowMonthKey = monthKey(new Date());
-    const nowWeekKey = weekKey(new Date());
+  const now = new Date();
+  return budgets.map((b) => {
+    const start = new Date(b.startDate);
+    const end = new Date(b.endDate);
+    const spent = transactions
+      .filter((t) => {
+        if (t.type !== "expense" || t.category !== b.category) return false;
+        const d = new Date(t.date);
+        return d >= start && d <= end;
+      })
+      .reduce((s, t) => s + t.amount, 0);
+    const status = now < start ? "upcoming" : now > end ? "expired" : "active";
+    return { ...b, spent, ratio: spent / b.amount, status };
+  }).sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+}, [budgets, transactions]);
 
-    return Object.entries(budgets)
-      .filter(([, b]) => b && b.amount > 0)
-      .map(([category, b]) => {
-        const period = b.period === "weekly" ? "weekly" : "monthly";
-        const spent = transactions
-          .filter((t) => {
-            if (t.type !== "expense" || t.category !== category) return false;
-            return period === "weekly"
-              ? weekKey(t.date) === nowWeekKey
-              : monthKey(t.date) === nowMonthKey;
-          })
-          .reduce((s, t) => s + t.amount, 0);
-        return {
-          category,
-          amount: b.amount,
-          period,
-          spent,
-          ratio: spent / b.amount,
-        };
-      });
-  }, [budgets, transactions]);
-
+const activeBudgets = useMemo(
+  () => budgetProgress.filter((b) => b.status === "active"),
+  [budgetProgress],
+);
   // const totalBalanceAllTime = useMemo(
   //   () =>
   //     transactions.reduce(
@@ -898,76 +920,86 @@ export default function Dashboard() {
   }, [savingsGoals]);
 
   const [budgetModalOpen, setBudgetModalOpen] = useState(false);
-  const [editingBudgetCategory, setEditingBudgetCategory] = useState(null);
-  const [editBudgetDraft, setEditBudgetDraft] = useState({
-    amount: "",
-    period: "monthly",
-  });
-  const [newBudget, setNewBudget] = useState({
-    category: CATEGORY_OPTIONS.expense[0],
-    amount: "",
-    period: "monthly",
-  });
+const [editingBudgetId, setEditingBudgetId] = useState(null);
+const [newBudget, setNewBudget] = useState({
+  category: CATEGORY_OPTIONS.expense[0],
+  amount: "",
+  monthKey: "", // จะ set ค่าเริ่มต้นตอนเปิด modal
+  periodType: "month", // "month" | "week"
+  weekIndex: 1,
+});
+const [editBudgetAmount, setEditBudgetAmount] = useState("");
 
   async function addBudget() {
-    if (!newBudget.amount || Number(newBudget.amount) <= 0) {
-      showToast("กรุณากรอกจำนวนเงินให้ถูกต้อง", "error");
-      return;
-    }
-    const updated = {
-      ...budgets,
-      [newBudget.category]: {
-        amount: Number(newBudget.amount),
-        period: newBudget.period,
-      },
-    };
-    try {
-      await updateSettings({ budgets: updated });
-      setBudgets(updated);
-      setNewBudget({
-        category: CATEGORY_OPTIONS.expense[0],
-        amount: "",
-        period: "monthly",
-      });
-      showToast("เพิ่มงบประมาณแล้ว");
-    } catch (err) {
-      showToast("เพิ่มงบประมาณไม่สำเร็จ", "error");
-    }
+  if (!newBudget.amount || Number(newBudget.amount) <= 0) {
+    showToast("กรุณากรอกจำนวนเงินให้ถูกต้อง", "error");
+    return;
+  }
+  const [y, m] = newBudget.monthKey.split("-").map(Number);
+  const monthIndex = m - 1;
+
+  let startDate, endDate, label;
+  if (newBudget.periodType === "month") {
+    startDate = new Date(y, monthIndex, 1);
+    endDate = new Date(y, monthIndex + 1, 0, 23, 59, 59);
+    label = monthLabel(newBudget.monthKey);
+  } else {
+    const weeks = getWeeksOfMonth(y, monthIndex);
+    const chosen = weeks.find((w) => w.index === Number(newBudget.weekIndex)) || weeks[0];
+    startDate = chosen.start;
+    endDate = chosen.end;
+    label = chosen.label;
   }
 
-  async function submitEditBudget(category) {
-    if (!editBudgetDraft.amount || Number(editBudgetDraft.amount) <= 0) {
-      showToast("กรุณากรอกจำนวนเงินให้ถูกต้อง", "error");
-      return;
-    }
-    const updated = {
-      ...budgets,
-      [category]: {
-        amount: Number(editBudgetDraft.amount),
-        period: editBudgetDraft.period,
-      },
-    };
-    try {
-      await updateSettings({ budgets: updated });
-      setBudgets(updated);
-      setEditingBudgetCategory(null);
-      showToast("แก้ไขงบประมาณแล้ว");
-    } catch (err) {
-      showToast("แก้ไขงบประมาณไม่สำเร็จ", "error");
-    }
-  }
+  const entry = {
+    category: newBudget.category,
+    amount: Number(newBudget.amount),
+    startDate,
+    endDate,
+    label,
+  };
 
-  async function removeBudget(category) {
-    const updated = { ...budgets };
-    delete updated[category];
-    try {
-      await updateSettings({ budgets: updated });
-      setBudgets(updated);
-      showToast("ลบงบประมาณแล้ว", "error");
-    } catch (err) {
-      showToast("ลบงบประมาณไม่สำเร็จ", "error");
-    }
+  try {
+    const updatedList = [...budgets, entry];
+    await updateSettings({ budgets: updatedList });
+    // โหลดใหม่จาก server เพื่อให้ได้ _id ที่ backend generate ให้
+    const s = await getSettings();
+    setBudgets(s.budgets || []);
+    setNewBudget((b) => ({ ...b, amount: "" }));
+    showToast("เพิ่มงบประมาณแล้ว");
+  } catch (err) {
+    showToast("เพิ่มงบประมาณไม่สำเร็จ", "error");
   }
+}
+
+async function submitEditBudget(id) {
+  if (!editBudgetAmount || Number(editBudgetAmount) <= 0) {
+    showToast("กรุณากรอกจำนวนเงินให้ถูกต้อง", "error");
+    return;
+  }
+  const updatedList = budgets.map((b) =>
+    b.id === id ? { ...b, amount: Number(editBudgetAmount) } : b,
+  );
+  try {
+    await updateSettings({ budgets: updatedList });
+    setBudgets(updatedList);
+    setEditingBudgetId(null);
+    showToast("แก้ไขงบประมาณแล้ว");
+  } catch (err) {
+    showToast("แก้ไขงบประมาณไม่สำเร็จ", "error");
+  }
+}
+
+async function removeBudget(id) {
+  const updatedList = budgets.filter((b) => b.id !== id);
+  try {
+    await updateSettings({ budgets: updatedList });
+    setBudgets(updatedList);
+    showToast("ลบงบประมาณแล้ว", "error");
+  } catch (err) {
+    showToast("ลบงบประมาณไม่สำเร็จ", "error");
+  }
+}
 
   function preprocessImage(file) {
     return new Promise((resolve, reject) => {
@@ -1894,12 +1926,12 @@ export default function Dashboard() {
               <div className="mb-2 flex items-center gap-1.5 text-xs font-bold text-[var(--text-muted)]">
                 <PiggyBank size={13} /> งบประมาณ
               </div>
-              {budgetProgress.length > 0 ? (
+              {activeBudgets.length > 0 ? (
                 <button
                   onClick={() => setBudgetModalOpen(true)}
                   className="flex w-full flex-col gap-2 border-none bg-transparent p-0 text-left cursor-pointer"
                 >
-                  {budgetProgress.map((b) => (
+                  {activeBudgets.map((b) => (
                     <div key={b.category}>
                       <div className="mb-1 flex items-baseline justify-between text-[11px]">
                         <span className="flex items-center gap-1 font-semibold text-[var(--text-dark)]">
@@ -3161,205 +3193,100 @@ export default function Dashboard() {
       </Modal>
 
       {/* Budget modal */}
-      <Modal
-        open={budgetModalOpen}
-        onClose={() => setBudgetModalOpen(false)}
-        title="งบประมาณ"
-        wide
-      >
-        <div className="mb-4 flex flex-col gap-3">
-          {budgetProgress.length === 0 && (
-            <p className="m-0 text-[11px] text-[var(--text-muted)]">
-              ยังไม่มีงบประมาณ เพิ่มหมวดหมู่แรกได้เลยด้านล่าง
-            </p>
-          )}
-          {budgetProgress.map((b) => {
-            const isEditing = editingBudgetCategory === b.category;
-            return (
-              <div
-                key={b.category}
-                className="rounded-xl border border-[var(--border)] p-3"
-              >
-                {isEditing ? (
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-[13px] font-semibold text-[var(--text-dark)]">
-                      {b.category}
-                    </span>
-                    <div className="flex gap-1.5">
-                      <input
-                        type="number"
-                        value={editBudgetDraft.amount}
-                        onChange={(e) =>
-                          setEditBudgetDraft((d) => ({
-                            ...d,
-                            amount: e.target.value,
-                          }))
-                        }
-                        placeholder="จำนวนเงิน"
-                        autoFocus
-                        className={`${inputCls} h-8 flex-1 text-xs`}
-                      />
-                      <select
-                        value={editBudgetDraft.period}
-                        onChange={(e) =>
-                          setEditBudgetDraft((d) => ({
-                            ...d,
-                            period: e.target.value,
-                          }))
-                        }
-                        className={`${selectCls} h-8 w-[100px] shrink-0 text-xs`}
-                      >
-                        <option value="monthly">รายเดือน</option>
-                        <option value="weekly">รายสัปดาห์</option>
-                      </select>
-                    </div>
-                    <div className="flex gap-1.5">
-                      <button
-                        onClick={() => submitEditBudget(b.category)}
-                        className="mm-btn-3d mm-btn-primary flex-1 rounded-lg border-none bg-[var(--accent)] py-1.5 text-xs font-semibold text-[var(--accent-contrast)] cursor-pointer"
-                      >
-                        บันทึก
-                      </button>
-                      <button
-                        onClick={() => setEditingBudgetCategory(null)}
-                        className="mm-btn-3d flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-transparent cursor-pointer"
-                      >
-                        <X size={12} className="text-[var(--text-muted)]" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5 text-[13px] font-semibold text-[var(--text-dark)]">
-                        {b.category}
-                        <span className="rounded-full bg-[var(--card-alt)] px-1.5 py-[1px] text-[9px] font-medium text-[var(--text-muted)]">
-                          {b.period === "weekly" ? "รายสัปดาห์" : "รายเดือน"}
-                        </span>
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => {
-                            setEditingBudgetCategory(b.category);
-                            setEditBudgetDraft({
-                              amount: String(b.amount),
-                              period: b.period,
-                            });
-                          }}
-                          aria-label="แก้ไขงบประมาณ"
-                          className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer"
-                        >
-                          <Pencil
-                            size={11}
-                            className="text-[var(--text-muted)]"
-                          />
-                        </button>
-                        <button
-                          onClick={() => removeBudget(b.category)}
-                          aria-label="ลบงบประมาณ"
-                          className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer"
-                        >
-                          <X size={11} className="text-[var(--text-muted)]" />
-                        </button>
-                      </div>
-                    </div>
-                    <ProgressBar
-                      ratio={b.ratio}
-                      color={
-                        b.ratio >= 1
-                          ? "var(--expense)"
-                          : b.ratio >= 0.8
-                            ? "var(--warn)"
-                            : "var(--income)"
-                      }
-                    />
-                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
-                      <span>
-                        {formatBaht(b.spent)} / {formatBaht(b.amount)}
-                      </span>
-                      <span>{Math.round(b.ratio * 100)}%</span>
-                    </div>
-                    <p className="m-0 mt-1 text-[10px] text-[var(--text-muted)]">
-                      รีเซ็ตอัตโนมัติทุกต้น
-                      {b.period === "weekly" ? "สัปดาห์" : "เดือน"}{" "}
-                      ไม่ต้องบันทึกอะไรเพิ่ม
-                    </p>
-                  </>
-                )}
+<Modal open={budgetModalOpen} onClose={() => setBudgetModalOpen(false)} title="งบประมาณ" wide>
+  <div className="mb-4 flex flex-col gap-3">
+    {budgetProgress.length === 0 && (
+      <p className="m-0 text-[11px] text-[var(--text-muted)]">ยังไม่มีงบประมาณ เพิ่มได้เลยด้านล่าง</p>
+    )}
+    {budgetProgress.map((b) => {
+      const isEditing = editingBudgetId === b.id;
+      const statusLabel = b.status === "active" ? "กำลังใช้งาน" : b.status === "upcoming" ? "ยังไม่เริ่ม" : "หมดเขตแล้ว";
+      const statusColor = b.status === "active" ? "var(--income)" : b.status === "upcoming" ? "var(--accent)" : "var(--text-muted)";
+      return (
+        <div key={b.id} className="rounded-xl border border-[var(--border)] p-3" style={{ opacity: b.status === "expired" ? 0.6 : 1 }}>
+          <div className="mb-1.5 flex items-center justify-between">
+            <div className="min-w-0">
+              <span className="text-[13px] font-semibold text-[var(--text-dark)]">{b.category}</span>
+              <div className="flex items-center gap-1.5 text-[10px]">
+                <span style={{ color: statusColor }} className="font-semibold">{statusLabel}</span>
+                <span className="text-[var(--text-muted)]">· {b.label}</span>
               </div>
-            );
-          })}
-        </div>
-
-        {(() => {
-          const usedCategories = Object.keys(budgets);
-          const availableCategories = CATEGORY_OPTIONS.expense.filter(
-            (c) => !usedCategories.includes(c),
-          );
-
-          if (availableCategories.length === 0) {
-            return (
-              <p className="m-0 text-[11px] text-[var(--text-muted)]">
-                ตั้งงบประมาณครบทุกหมวดหมู่แล้ว กดไอคอนดินสอด้านบนเพื่อแก้ไข
-              </p>
-            );
-          }
-
-          return (
-            <>
-              <h4 className="m-0 mb-2.5 flex items-center gap-1.5 text-[13px] font-bold text-[var(--text-dark)]">
-                เพิ่มงบประมาณใหม่
-              </h4>
-              <div className="mb-2.5 flex flex-col gap-2">
-                <select
-                  value={
-                    availableCategories.includes(newBudget.category)
-                      ? newBudget.category
-                      : availableCategories[0]
-                  }
-                  onChange={(e) =>
-                    setNewBudget((b) => ({ ...b, category: e.target.value }))
-                  }
-                  className={inputCls}
-                >
-                  {availableCategories.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex gap-1.5">
-                  <input
-                    type="number"
-                    value={newBudget.amount}
-                    onChange={(e) =>
-                      setNewBudget((b) => ({ ...b, amount: e.target.value }))
-                    }
-                    placeholder="จำนวนเงินงบประมาณ (บาท)"
-                    className={`${inputCls} flex-1`}
-                  />
-                  <select
-                    value={newBudget.period}
-                    onChange={(e) =>
-                      setNewBudget((b) => ({ ...b, period: e.target.value }))
-                    }
-                    className={`${selectCls} w-[110px] shrink-0`}
-                  >
-                    <option value="monthly">รายเดือน</option>
-                    <option value="weekly">รายสัปดาห์</option>
-                  </select>
-                </div>
-              </div>
-              <button
-                onClick={addBudget}
-                className="mm-btn-3d mm-btn-primary w-full rounded-lg border-none bg-[var(--accent)] py-2.5 text-sm font-bold text-[var(--accent-contrast)] cursor-pointer"
-              >
-                + เพิ่มงบประมาณ
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <button onClick={() => { setEditingBudgetId(b.id); setEditBudgetAmount(String(b.amount)); }} aria-label="แก้ไขงบประมาณ" className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer">
+                <Pencil size={11} className="text-[var(--text-muted)]" />
               </button>
+              <button onClick={() => removeBudget(b.id)} aria-label="ลบงบประมาณ" className="mm-btn-3d flex h-6 w-6 items-center justify-center rounded-md border-none bg-[var(--card-alt)] cursor-pointer">
+                <X size={11} className="text-[var(--text-muted)]" />
+              </button>
+            </div>
+          </div>
+
+          {isEditing ? (
+            <div className="flex gap-1.5">
+              <input type="number" value={editBudgetAmount} onChange={(e) => setEditBudgetAmount(e.target.value)} autoFocus className={`${inputCls} h-8 flex-1 text-xs`} />
+              <button onClick={() => submitEditBudget(b.id)} className="mm-btn-3d mm-btn-primary shrink-0 rounded-lg border-none bg-[var(--accent)] px-3 text-xs font-semibold text-[var(--accent-contrast)] cursor-pointer">บันทึก</button>
+              <button onClick={() => setEditingBudgetId(null)} className="mm-btn-3d flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-transparent cursor-pointer">
+                <X size={12} className="text-[var(--text-muted)]" />
+              </button>
+            </div>
+          ) : (
+            <>
+              <ProgressBar ratio={b.ratio} color={b.ratio >= 1 ? "var(--expense)" : b.ratio >= 0.8 ? "var(--warn)" : "var(--income)"} />
+              <div className="mt-1.5 flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                <span>{formatBaht(b.spent)} / {formatBaht(b.amount)}</span>
+                <span>{Math.round(b.ratio * 100)}%</span>
+              </div>
             </>
-          );
+          )}
+        </div>
+      );
+    })}
+  </div>
+
+  <h4 className="m-0 mb-2.5 flex items-center gap-1.5 text-[13px] font-bold text-[var(--text-dark)]">
+    เพิ่มงบประมาณใหม่
+  </h4>
+  <div className="mb-2.5 flex flex-col gap-2">
+    <select value={newBudget.category} onChange={(e) => setNewBudget((b) => ({ ...b, category: e.target.value }))} className={inputCls}>
+      {CATEGORY_OPTIONS.expense.map((c) => <option key={c} value={c}>{c}</option>)}
+    </select>
+
+    <input type="number" value={newBudget.amount} onChange={(e) => setNewBudget((b) => ({ ...b, amount: e.target.value }))} placeholder="จำนวนเงินงบประมาณ (บาท)" className={inputCls} />
+
+    <div className="flex gap-1.5">
+      <button type="button" onClick={() => setNewBudget((b) => ({ ...b, periodType: "month" }))} className="flex-1 rounded-lg py-2 text-xs font-semibold cursor-pointer" style={{ border: `1px solid ${newBudget.periodType === "month" ? "var(--accent)" : "var(--border)"}`, background: newBudget.periodType === "month" ? "var(--accent)" : "var(--card)", color: newBudget.periodType === "month" ? "var(--accent-contrast)" : "var(--text-dark)" }}>
+        ทั้งเดือน
+      </button>
+      <button type="button" onClick={() => setNewBudget((b) => ({ ...b, periodType: "week" }))} className="flex-1 rounded-lg py-2 text-xs font-semibold cursor-pointer" style={{ border: `1px solid ${newBudget.periodType === "week" ? "var(--accent)" : "var(--border)"}`, background: newBudget.periodType === "week" ? "var(--accent)" : "var(--card)", color: newBudget.periodType === "week" ? "var(--accent-contrast)" : "var(--text-dark)" }}>
+        รายสัปดาห์
+      </button>
+    </div>
+
+    <select
+      value={newBudget.monthKey || getMonthOptions()[2].key}
+      onChange={(e) => setNewBudget((b) => ({ ...b, monthKey: e.target.value, weekIndex: 1 }))}
+      className={inputCls}
+    >
+      {getMonthOptions().map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+    </select>
+
+    {newBudget.periodType === "week" && (
+      <select value={newBudget.weekIndex} onChange={(e) => setNewBudget((b) => ({ ...b, weekIndex: Number(e.target.value) }))} className={inputCls}>
+        {(() => {
+          const mk = newBudget.monthKey || getMonthOptions()[2].key;
+          const [y, m] = mk.split("-").map(Number);
+          return getWeeksOfMonth(y, m - 1).map((w) => (
+            <option key={w.index} value={w.index}>{w.label}</option>
+          ));
         })()}
-      </Modal>
+      </select>
+    )}
+  </div>
+  <button onClick={addBudget} className="mm-btn-3d mm-btn-primary w-full rounded-lg border-none bg-[var(--accent)] py-2.5 text-sm font-bold text-[var(--accent-contrast)] cursor-pointer">
+    + เพิ่มงบประมาณ
+  </button>
+</Modal>
     </div>
   );
 }
