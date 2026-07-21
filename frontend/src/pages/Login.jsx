@@ -253,24 +253,24 @@ export default function AuthPage() {
           <div className="flex flex-col p-6 sm:p-9">
             <div className="mb-6 flex items-center justify-between">
               <div className="flex items-center gap-2.5 md:hidden">
-  <img
-    src={logoMeowMoney}
-    alt="MeowMoney"
-    className="h-11 w-11 object-contain"
-    style={{
-      filter: "drop-shadow(0 4px 10px rgba(108,92,231,0.35))",
-    }}
-  />
-  <span
-    className="bg-clip-text text-base font-extrabold tracking-tight text-transparent"
-    style={{
-      backgroundImage:
-        "linear-gradient(135deg, var(--accent) 0%, var(--accent-pink) 100%)",
-    }}
-  >
-    MeowMoney
-  </span>
-</div>
+                <img
+                  src={logoMeowMoney}
+                  alt="MeowMoney"
+                  className="h-11 w-11 object-contain"
+                  style={{
+                    filter: "drop-shadow(0 4px 10px rgba(108,92,231,0.35))",
+                  }}
+                />
+                <span
+                  className="bg-clip-text text-2xl font-extrabold tracking-tight text-transparent"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(135deg, var(--accent) 0%, var(--accent-pink) 100%)",
+                  }}
+                >
+                  MeowMoney
+                </span>
+              </div>
               <button
                 onClick={() => setDarkMode((d) => !d)}
                 aria-label="สลับธีม"
