@@ -1955,7 +1955,7 @@ export default function Dashboard() {
               {savingsGoals.length > 0 ? (
                 <button
                   onClick={() => setSavingsModalOpen(true)}
-                  className="w-full cursor-pointer border-none bg-transparent p-0 text-left"
+                  className="block w-full min-w-0 cursor-pointer border-none bg-transparent p-0 text-left"
                 >
                   <div className="mb-1 flex items-baseline justify-between">
                     <span className="text-[13px] font-semibold text-[var(--text-dark)]">
@@ -2002,7 +2002,7 @@ export default function Dashboard() {
               {activeBudgets.length > 0 ? (
                 <button
                   onClick={() => setBudgetModalOpen(true)}
-                  className="flex w-full flex-col gap-2 border-none bg-transparent p-0 text-left cursor-pointer"
+                  className="flex w-full min-w-0 flex-col gap-2 border-none bg-transparent p-0 text-left cursor-pointer"
                 >
                   {activeBudgets.map((b) => (
                     <div key={b.id}>
