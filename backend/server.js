@@ -33,6 +33,11 @@ app.get('/', (req, res) => {
     res.json({ message: 'API ระบบบันทึกรายรับรายจ่ายทำงานปกติ' });
 });
 
+// Health check endpoint สำหรับ cron-job.org ping กัน Render sleep
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // ผูก routes เข้ากับ path หลัก
 app.use('/api/auth', authRoutes);
 app.use('/api/transactions', transactionRoutes);
