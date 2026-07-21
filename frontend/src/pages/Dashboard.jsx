@@ -427,14 +427,20 @@ function ProgressBar({ ratio, color, trackColor }) {
   const pct = Math.max(0, Math.min(100, ratio * 100));
   return (
     <div
-      className="mm-well h-2.5 w-full overflow-hidden rounded-full"
-      style={{ background: trackColor || "var(--card-alt)" }}
+      className="mm-well overflow-hidden rounded-full"
+      style={{
+        width: "100%",
+        boxSizing: "border-box",
+        height: "10px",
+        background: trackColor || "var(--card-alt)",
+      }}
     >
       <div
-        className="h-full rounded-full transition-[width] duration-300"
         style={{
           width: `${pct}%`,
+          height: "100%",
           background: color,
+          borderRadius: "9999px",
           boxShadow:
             "inset 0 1px 1px rgba(255,255,255,0.5), 0 1px 2px rgba(0,0,0,0.15)",
         }}
@@ -1953,9 +1959,20 @@ export default function Dashboard() {
                 <Target size={13} /> เป้าหมายออม
               </div>
               {savingsGoals.length > 0 ? (
-                <button
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setSavingsModalOpen(true)}
-                  className="block w-full min-w-0 cursor-pointer border-none bg-transparent p-0 text-left"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ")
+                      setSavingsModalOpen(true);
+                  }}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    display: "block",
+                  }}
+                  className="cursor-pointer text-left"
                 >
                   <div className="mb-1 flex items-baseline justify-between">
                     <span className="text-[13px] font-semibold text-[var(--text-dark)]">
@@ -1984,7 +2001,7 @@ export default function Dashboard() {
                     {formatBaht(savingsTotals.totalSaved)} /{" "}
                     {formatBaht(savingsTotals.totalTarget)}
                   </div>
-                </button>
+                </div>
               ) : (
                 <button
                   onClick={() => setSavingsModalOpen(true)}
@@ -2000,14 +2017,25 @@ export default function Dashboard() {
                 <PiggyBank size={13} /> งบประมาณ
               </div>
               {activeBudgets.length > 0 ? (
-                <button
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setBudgetModalOpen(true)}
-                  className="flex w-full min-w-0 flex-col gap-2 border-none bg-transparent p-0 text-left cursor-pointer"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ")
+                      setBudgetModalOpen(true);
+                  }}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                  }}
+                  className="cursor-pointer text-left"
                 >
                   {activeBudgets.map((b) => (
                     <div key={b.id}>
-                      {" "}
-                      {/* เปลี่ยนจาก key={b.category} ด้วย ดูหมายเหตุด้านล่าง */}
                       <div className="mb-1 flex items-baseline justify-between text-[11px]">
                         <span className="flex items-center gap-1 font-semibold text-[var(--text-dark)]">
                           {b.category}
@@ -2031,7 +2059,7 @@ export default function Dashboard() {
                       />
                     </div>
                   ))}
-                </button>
+                </div>
               ) : (
                 <button
                   onClick={() => setBudgetModalOpen(true)}
