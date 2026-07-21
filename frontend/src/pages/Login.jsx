@@ -213,14 +213,12 @@ export default function AuthPage() {
               <PawIcon size={190} color="#ffffff" />
             </div>
 
-            <div className="relative z-10 flex items-center gap-2 text-white">
-              <div className="mm-float flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white/15">
-                <img
-                  src={logoMeowMoney}
-                  alt="MeowMoney"
-                  className="h-full w-full object-contain p-1.5"
-                />
-              </div>
+            <div className="relative z-10 flex items-center gap-2.5 text-white">
+              <img
+                src={logoMeowMoney}
+                alt="MeowMoney"
+                className="h-18 w-18 object-contain"
+              />
               <span className="text-lg font-extrabold tracking-tight">
                 MeowMoney
               </span>
