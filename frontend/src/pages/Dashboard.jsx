@@ -1261,7 +1261,7 @@ export default function Dashboard() {
         }
       }
       setFormOpen(false);
-      setHistoryModalOpen(true);
+      // setHistoryModalOpen(true);
     } catch (err) {
       setFormError(
         err.response?.data?.message || "บันทึกไม่สำเร็จ กรุณาลองใหม่",
@@ -1975,20 +1975,22 @@ export default function Dashboard() {
                   className="cursor-pointer text-left"
                 >
                   <div className="mb-1 flex items-baseline justify-between">
-                    <span className="text-[13px] font-semibold text-[var(--text-dark)]">
-                      {savingsGoals.length} เป้าหมาย
-                    </span>
-                    <span className="text-[11px] text-[var(--text-muted)]">
-                      {savingsTotals.totalTarget > 0
-                        ? Math.round(
-                            (savingsTotals.totalSaved /
-                              savingsTotals.totalTarget) *
-                              100,
-                          )
-                        : 0}
-                      %
-                    </span>
-                  </div>
+  <span className="text-[13px] font-semibold text-[var(--text-dark)]">
+    {savingsGoals.length === 1
+      ? savingsGoals[0].name
+      : `${savingsGoals.length} เป้าหมาย`}
+  </span>
+  <span className="text-[11px] text-[var(--text-muted)]">
+    {savingsTotals.totalTarget > 0
+      ? Math.round(
+          (savingsTotals.totalSaved /
+            savingsTotals.totalTarget) *
+            100,
+        )
+      : 0}
+    %
+  </span>
+</div>
                   <ProgressBar
                     ratio={
                       savingsTotals.totalTarget > 0
