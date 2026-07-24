@@ -114,7 +114,10 @@ const depositToGoal = async (req, res, next) => {
       type: 'expense',
       category: 'เงินออม',
       amount: Number(amount),
-      date: new Date(),
+      // ใช้แค่วันที่ (ไม่มีเวลา) ให้ตรง format เดียวกับ transaction อื่นๆ ทั้งหมด
+      // เพราะหน้า history sort โดยเทียบ "date" ก่อน แล้วค่อย fallback ไป createdAt
+      // ถ้า date มี time component ปนอยู่จะทำให้ลำดับผิดเพี้ยนเมื่อเทียบกับรายการอื่นในวันเดียวกัน
+      date: new Date().toISOString().slice(0, 10),
       note: `เติมเงินเข้าเป้าหมาย "${goal.name}"`,
       savingsGoalId: goal._id,
     });

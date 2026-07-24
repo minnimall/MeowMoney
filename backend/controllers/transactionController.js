@@ -1,4 +1,5 @@
 const Transaction = require('../models/Transaction');
+const SavingsGoal = require('../models/SavingsGoal');
 
 // @route GET /api/transactions  (protected)
 // query params ที่รองรับ: type, category, year, month, startDate, endDate
@@ -101,7 +102,22 @@ const deleteTransaction = async (req, res, next) => {
     transaction.isDeleted = true;
     await transaction.save();
 
-    res.json({ success: true, data: {} });
+    // ถ้ารายการนี้ผูกกับเป้าหมายออม ต้องคืนยอด saved กลับด้วย
+    // ไม่งั้นเลขในเป้าหมายจะค้างไม่ sync กับยอดคงเหลือจริง
+    let updatedGoal = null;
+    if (transaction.savingsGoalId) {
+      const goal = await SavingsGoal.findOne({
+        _id: transaction.savingsGoalId,
+        user: req.user._id,
+      });
+      if (goal) {
+        goal.saved = Math.max(0, goal.saved - transaction.amount);
+        await goal.save();
+        updatedGoal = goal;
+      }
+    }
+
+    res.json({ success: true, data: { updatedGoal } });
   } catch (error) {
     next(error);
   }

@@ -27,8 +27,9 @@ const userSchema = new mongoose.Schema(
     },
     avatar: {
       type: String,
-      enum: ['initial', 'yapapa', 'happy', 'robocat'],
-      default: 'initial',
+      trim: true,
+      maxlength: 100,
+      default: 'meow',
     },
   },
   { timestamps: true }

@@ -210,7 +210,7 @@ function lightenHex(hex, percent) {
   return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
 }
 function formatBaht(n) {
-  return `฿${Math.round(n).toLocaleString("th-TH")}`;
+  return `${Math.round(n).toLocaleString("th-TH")} บาท`;
 }
 function formatDate(d) {
   return new Date(d).toLocaleDateString("th-TH", {
@@ -632,16 +632,21 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recurringList]);
 
-  const AVATAR_OPTIONS = useMemo(
-    () => [
-      {
-        id: "robocat",
-        label: "แมวสุ่ม (RoboHash)",
-        src: `https://robohash.org/${encodeURIComponent(profileForm.email || profileForm.name || "meow")}?set=set4`,
-      },
-    ],
-    [profileForm.email, profileForm.name],
+  function randomAvatarSeed() {
+      return Math.random().toString(36).slice(2, 10);
+    }
+
+  function avatarSrcFromSeed(seed) {
+    return `https://robohash.org/${encodeURIComponent(seed)}?set=set4`;
+  }
+  const [avatarChoices, setAvatarChoices] = useState(() =>
+    Array.from({ length: 5 }, () => randomAvatarSeed()),
   );
+  function rerollAvatars() {
+    setAvatarChoices(Array.from({ length: 5 }, () => randomAvatarSeed()));
+  }
+
+  
 
   const [filterType, setFilterType] = useState("all");
   const [filterCategory, setFilterCategory] = useState("all");
@@ -717,7 +722,7 @@ export default function Dashboard() {
       });
       setTransactions((prev) => [created, ...prev]);
       checkBudgetAfterAdd(created);
-      showToast(`เหมียว~ เพิ่ม "${category}" ${formatBaht(amount)} แล้ว`);
+      showToast(`เพิ่ม ${category} ${(formatBaht(amount))} แล้ว`);
     } catch (err) {
       showToast("เพิ่มรายการไม่สำเร็จ", "error");
     }
@@ -905,6 +910,12 @@ export default function Dashboard() {
   const catSize = 56 + catStatus.level * 14;
 
   function checkBudgetAfterAdd(tx) {
+    // ปิดการแจ้งเตือน toast ตอนเพิ่มรายการแล้วเกิน/ใกล้เต็มงบไว้ก่อน
+    // เพราะการ์ดงบประมาณหน้าแรกมี progress bar แสดงอยู่แล้ว
+    // (เก็บฟังก์ชันนี้ไว้เผื่ออยากเปิดใช้อีกครั้งในอนาคต — แค่คืนค่า return ด้านล่างนี้ก็พอ)
+    return;
+
+    // eslint-disable-next-line no-unreachable
     if (tx.type !== "expense") return;
     const now = new Date();
     const relevantBudgets = budgets.filter(
@@ -930,7 +941,7 @@ export default function Dashboard() {
         setTimeout(
           () =>
             showToast(
-              `เหมียว! หมวด "${tx.category}" (${budget.label}) ใช้เกินงบแล้ว (${formatBaht(spent)}/${formatBaht(budget.amount)})`,
+              `"${tx.category}" (${budget.label}) เกินงบ ${formatBaht(spent)}/${formatBaht(budget.amount)}`,
               "error",
             ),
           3300,
@@ -939,7 +950,7 @@ export default function Dashboard() {
         setTimeout(
           () =>
             showToast(
-              `เหมียว~ หมวด "${tx.category}" (${budget.label}) ใกล้เต็มงบแล้วนะ (${formatBaht(spent)}/${formatBaht(budget.amount)})`,
+              `"${tx.category}" (${budget.label}) ใกล้เต็มงบ ${formatBaht(spent)}/${formatBaht(budget.amount)}`,
             ),
           3300,
         );
@@ -1205,6 +1216,20 @@ export default function Dashboard() {
     setFormOpen(true);
   }
   function openEditForm(t) {
+    if (t.recurringId) {
+      showToast(
+        "รายการนี้เกิดจากรายการเกิดซ้ำ แก้ไขได้ที่หน้าตั้งค่าเท่านั้น",
+        "error",
+      );
+      return;
+    }
+    if (t.savingsGoalId) {
+      showToast(
+        "รายการเงินออมแก้ยอดไม่ได้ ลบแล้วเติมใหม่แทน",
+        "error",
+      );
+      return;
+    }
     setHistoryModalOpen(false);
     setEditingId(t.id);
     setForm({
@@ -1271,8 +1296,14 @@ export default function Dashboard() {
 
   async function confirmDelete() {
     try {
-      await deleteTransaction(deleteTarget.id);
+      const result = await deleteTransaction(deleteTarget.id);
       setTransactions((prev) => prev.filter((t) => t.id !== deleteTarget.id));
+      if (result?.updatedGoal) {
+        const g = result.updatedGoal;
+        setSavingsGoals((prev) =>
+          prev.map((sg) => (sg.id === g.id || sg.id === g._id ? { ...sg, saved: g.saved } : sg)),
+        );
+      }
       showToast("ลบรายการเรียบร้อยแล้ว", "error");
     } catch (err) {
       showToast("ลบไม่สำเร็จ กรุณาลองใหม่", "error");
@@ -1283,11 +1314,23 @@ export default function Dashboard() {
 
   async function saveProfile() {
     try {
-      const updated = await updateProfile(profileForm);
-      setProfile(updated);
+      const updated = await updateProfile({
+        username: profileForm.name,
+        email: profileForm.email,
+        avatar: profileForm.avatar,
+      });
+      setProfile({
+        name: updated.username,
+        email: updated.email,
+        avatar: updated.avatar,
+      });
       setProfileOpen(false);
+      showToast("บันทึกโปรไฟล์แล้ว");
     } catch (err) {
-      showToast("บันทึกโปรไฟล์ไม่สำเร็จ", "error");
+      showToast(
+        err.response?.data?.message || "บันทึกโปรไฟล์ไม่สำเร็จ",
+        "error",
+      );
     }
   }
 
@@ -1683,18 +1726,13 @@ export default function Dashboard() {
                 className="flex items-center gap-2 rounded-[20px] border-none bg-transparent py-1 pl-1 pr-2 cursor-pointer"
               >
                 <div className="mm-icon-well flex h-[30px] w-[30px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--card-alt)] text-xs font-bold text-[var(--text-dark)]">
-                  {(() => {
-                    const avatarSrc =
-                      AVATAR_OPTIONS.find((a) => a.id === profile.avatar)
-                        ?.src || AVATAR_OPTIONS[0].src;
-                    return (
-                      <img
-                        src={avatarSrc}
-                        alt={profile.name}
-                        className="h-full w-full object-cover"
-                      />
-                    );
-                  })()}
+                  <img
+                    src={avatarSrcFromSeed(
+                      profile.avatar || profile.email || profile.name || "meow",
+                    )}
+                    alt={profile.name}
+                    className="h-full w-full object-cover"
+                  />
                 </div>
                 <span className="text-[13px] font-medium text-[var(--text-dark)]">
                   {profile.name}
@@ -2046,19 +2084,22 @@ export default function Dashboard() {
                           </span>
                         </span>
                         <span className="text-[var(--text-muted)]">
-                          {formatBaht(b.spent)}/{formatBaht(b.amount)}
+                          {Math.round(b.ratio * 100)}%
                         </span>
                       </div>
                       <ProgressBar
                         ratio={b.ratio}
                         color={
-                          b.ratio >= 1
+                          b.ratio > 1
                             ? "var(--expense)"
                             : b.ratio >= 0.8
                               ? "var(--warn)"
                               : "var(--income)"
                         }
                       />
+                      <div className="mt-1.5 text-[11px] text-[var(--text-muted)]">
+                        {formatBaht(b.spent)} / {formatBaht(b.amount)}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -2346,26 +2387,34 @@ export default function Dashboard() {
         title="แก้ไขโปรไฟล์"
       >
         <label className={labelCls}>รูปโปรไฟล์</label>
-        <div className="mb-4 flex flex-wrap gap-2.5">
-          {AVATAR_OPTIONS.map((a) => (
+        <div className="mb-2.5 flex flex-wrap gap-2.5">
+          {avatarChoices.map((seed) => (
             <button
-              key={a.id}
-              onClick={() => setProfileForm((f) => ({ ...f, avatar: a.id }))}
-              aria-label={a.label}
-              title={a.label}
+              key={seed}
+              type="button"
+              onClick={() => setProfileForm((f) => ({ ...f, avatar: seed }))}
+              aria-label="เลือกรูปแมวนี้"
+              title="เลือกรูปแมวนี้"
               className="mm-btn-3d flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--card-alt)] p-0 cursor-pointer"
               style={{
-                border: `2px solid ${profileForm.avatar === a.id ? "var(--accent)" : "var(--border)"}`,
+                border: `2px solid ${profileForm.avatar === seed ? "var(--accent)" : "var(--border)"}`,
               }}
             >
               <img
-                src={a.src}
-                alt={a.label}
+                src={avatarSrcFromSeed(seed)}
+                alt="ตัวเลือกรูปแมว"
                 className="h-full w-full object-cover"
               />
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          onClick={rerollAvatars}
+          className="mm-btn-3d mb-4 flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-transparent px-3 py-2 text-xs font-semibold text-[var(--text-dark)] cursor-pointer"
+        >
+          <Sparkles size={12} className="text-[var(--accent)]" /> สุ่มรูปแมวใหม่
+        </button>
 
         <label className={labelCls}>
           <UserIcon size={12} className="mr-1 -mb-px inline" />
@@ -3212,7 +3261,15 @@ export default function Dashboard() {
                 <button
                   onClick={() => openEditForm(t)}
                   aria-label="แก้ไข"
+                  title={
+                    t.recurringId || t.savingsGoalId
+                      ? "รายการนี้แก้ไขได้เฉพาะจากหน้าที่เกี่ยวข้องเท่านั้น"
+                      : "แก้ไข"
+                  }
                   className={iconBtnCls}
+                  style={{
+                    opacity: t.recurringId || t.savingsGoalId ? 0.4 : 1,
+                  }}
                 >
                   <Pencil size={13} className="text-[var(--text-muted)]" />
                 </button>
@@ -3381,7 +3438,7 @@ export default function Dashboard() {
                     <ProgressBar
                       ratio={b.ratio}
                       color={
-                        b.ratio >= 1
+                        b.ratio > 1
                           ? "var(--expense)"
                           : b.ratio >= 0.8
                             ? "var(--warn)"

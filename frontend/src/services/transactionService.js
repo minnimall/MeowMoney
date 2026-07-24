@@ -32,7 +32,8 @@ export async function updateTransaction(id, payload) {
 }
 
 export async function deleteTransaction(id) {
-  await api.delete(`/transactions/${id}`);
+  const res = await api.delete(`/transactions/${id}`);
+  return res.data.data;
 }
 
 // สรุปยอดรวม รายรับ/รายจ่าย/คงเหลือ ตามตัวกรองปัจจุบัน
