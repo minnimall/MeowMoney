@@ -633,8 +633,8 @@ export default function Dashboard() {
   }, [recurringList]);
 
   function randomAvatarSeed() {
-      return Math.random().toString(36).slice(2, 10);
-    }
+    return Math.random().toString(36).slice(2, 10);
+  }
 
   function avatarSrcFromSeed(seed) {
     return `https://robohash.org/${encodeURIComponent(seed)}?set=set4`;
@@ -645,8 +645,6 @@ export default function Dashboard() {
   function rerollAvatars() {
     setAvatarChoices(Array.from({ length: 5 }, () => randomAvatarSeed()));
   }
-
-  
 
   const [filterType, setFilterType] = useState("all");
   const [filterCategory, setFilterCategory] = useState("all");
@@ -722,7 +720,7 @@ export default function Dashboard() {
       });
       setTransactions((prev) => [created, ...prev]);
       checkBudgetAfterAdd(created);
-      showToast(`เพิ่ม ${category} ${(formatBaht(amount))} แล้ว`);
+      showToast(`เพิ่ม ${category} ${formatBaht(amount)} แล้ว`);
     } catch (err) {
       showToast("เพิ่มรายการไม่สำเร็จ", "error");
     }
@@ -1224,10 +1222,7 @@ export default function Dashboard() {
       return;
     }
     if (t.savingsGoalId) {
-      showToast(
-        "รายการเงินออมแก้ยอดไม่ได้ ลบแล้วเติมใหม่แทน",
-        "error",
-      );
+      showToast("รายการเงินออมแก้ยอดไม่ได้ ลบแล้วเติมใหม่แทน", "error");
       return;
     }
     setHistoryModalOpen(false);
@@ -1301,7 +1296,9 @@ export default function Dashboard() {
       if (result?.updatedGoal) {
         const g = result.updatedGoal;
         setSavingsGoals((prev) =>
-          prev.map((sg) => (sg.id === g.id || sg.id === g._id ? { ...sg, saved: g.saved } : sg)),
+          prev.map((sg) =>
+            sg.id === g.id || sg.id === g._id ? { ...sg, saved: g.saved } : sg,
+          ),
         );
       }
       showToast("ลบรายการเรียบร้อยแล้ว", "error");
@@ -2013,22 +2010,22 @@ export default function Dashboard() {
                   className="cursor-pointer text-left"
                 >
                   <div className="mb-1 flex items-baseline justify-between">
-  <span className="text-[13px] font-semibold text-[var(--text-dark)]">
-    {savingsGoals.length === 1
-      ? savingsGoals[0].name
-      : `${savingsGoals.length} เป้าหมาย`}
-  </span>
-  <span className="text-[11px] text-[var(--text-muted)]">
-    {savingsTotals.totalTarget > 0
-      ? Math.round(
-          (savingsTotals.totalSaved /
-            savingsTotals.totalTarget) *
-            100,
-        )
-      : 0}
-    %
-  </span>
-</div>
+                    <span className="text-[13px] font-semibold text-[var(--text-dark)]">
+                      {savingsGoals.length === 1
+                        ? savingsGoals[0].name
+                        : `${savingsGoals.length} เป้าหมาย`}
+                    </span>
+                    <span className="text-[11px] text-[var(--text-muted)]">
+                      {savingsTotals.totalTarget > 0
+                        ? Math.round(
+                            (savingsTotals.totalSaved /
+                              savingsTotals.totalTarget) *
+                              100,
+                          )
+                        : 0}
+                      %
+                    </span>
+                  </div>
                   <ProgressBar
                     ratio={
                       savingsTotals.totalTarget > 0
@@ -2755,6 +2752,8 @@ export default function Dashboard() {
                       boxShadow: C.shadowCard,
                       fontSize: 12,
                     }}
+                    labelStyle={{ color: C.textDark }}
+                    itemStyle={{ color: C.textDark }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -3098,6 +3097,8 @@ export default function Dashboard() {
                         boxShadow: C.shadowCard,
                         fontSize: 12,
                       }}
+                      labelStyle={{ color: C.textDark }}
+                      itemStyle={{ color: C.textDark }}
                     />
                     <Bar
                       dataKey="รายรับ"
