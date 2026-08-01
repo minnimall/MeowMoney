@@ -646,6 +646,26 @@ export default function Dashboard() {
     setAvatarChoices(Array.from({ length: 5 }, () => randomAvatarSeed()));
   }
 
+  // เก็บสถานะว่ารูป avatar ตัวไหนโหลดเสร็จแล้วบ้าง (key = seed, value = true)
+  // ใช้แสดง skeleton ระหว่างรอ กันกรณี user เปิด modal เร็วกว่ารูปจะโหลดเสร็จ
+  const [loadedAvatars, setLoadedAvatars] = useState({});
+
+  // พรีโหลดรูปอวตารล่วงหน้าตั้งแต่หน้า dashboard mount (ไม่ต้องรอเปิด modal)
+  // เบราว์เซอร์จะเริ่มโหลดรูปพวกนี้แบบ background ทันที พอเปิด modal จริง
+  // รูปจะมาจาก cache เลย ไม่ต้องรอโหลดใหม่
+  useEffect(() => {
+    avatarChoices.forEach((seed) => {
+      const img = new Image();
+      img.onload = () => {
+        setLoadedAvatars((prev) =>
+          prev[seed] ? prev : { ...prev, [seed]: true },
+        );
+      };
+      img.src = avatarSrcFromSeed(seed);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avatarChoices]);
+
   const [filterType, setFilterType] = useState("all");
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterYear, setFilterYear] = useState("all");
@@ -1599,6 +1619,24 @@ export default function Dashboard() {
         .mm-cat-bounce { animation: mm-cat-bounce 2.4s ease-in-out infinite; }
         @keyframes mm-cat-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 
+        .mm-avatar-skeleton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card-alt);
+}
+.mm-avatar-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: mm-avatar-spin 0.7s linear infinite;
+}
+@keyframes mm-avatar-spin {
+  to { transform: rotate(360deg); }
+}
+
         /* ---------- 3D depth system ----------
            Two-tone shadow (light source top-left) makes flat cards read as
            physically raised tiles. Pressed / well variants sink inward so
@@ -2397,11 +2435,17 @@ export default function Dashboard() {
                 border: `2px solid ${profileForm.avatar === seed ? "var(--accent)" : "var(--border)"}`,
               }}
             >
-              <img
-                src={avatarSrcFromSeed(seed)}
-                alt="ตัวเลือกรูปแมว"
-                className="h-full w-full object-cover"
-              />
+              {loadedAvatars[seed] ? (
+                <img
+                  src={avatarSrcFromSeed(seed)}
+                  alt="ตัวเลือกรูปแมว"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="mm-avatar-skeleton flex h-full w-full items-center justify-center rounded-full">
+                  <div className="mm-avatar-spinner" />
+                </div>
+              )}
             </button>
           ))}
         </div>
