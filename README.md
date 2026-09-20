@@ -15,7 +15,7 @@
 
 ## เทคโนโลยี
 
-React · Tailwind CSS · MongoDB
+React · Tailwind CSS · Express · MongoDB
 
 ## วิธีรันโปรเจกต์
 
