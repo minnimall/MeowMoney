@@ -1,4 +1,4 @@
-<img width="1505" height="898" alt="image" src="https://github.com/user-attachments/assets/ae1759e9-0ec8-40b9-ac23-52fd6c46c35b" /># MeowMoney
+# MeowMoney
 
 แอปจดรายรับ-รายจ่ายง่ายๆ ที่ช่วยให้คุณคุมเงินอยู่หมัด ไม่ว่าจะตั้งเป้าออมเงิน กำหนดงบใช้จ่ายรายเดือน/รายอาทิตย์ หรือดูว่าเงินหมดไปกับอะไรบ้าง MeowMoney มีให้ครบ 🐾
 
